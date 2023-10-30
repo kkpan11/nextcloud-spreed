@@ -6,6 +6,7 @@ OC.L10N.register(
     "Invalid file provided" : "Ongeldige lêer verskaf",
     "Invalid image" : "Ongeldige beeld",
     "Unknown filetype" : "Onbekende lêertipe",
+    "Accept" : "Aanvaar",
     "Open settings" : "Open instellings",
     "Andorra" : "Andorra",
     "United Arab Emirates" : "Verenigde Arabiese Emirate",
@@ -297,14 +298,13 @@ OC.L10N.register(
     "Devices" : "Toestelle",
     "Upload" : "Oplaai",
     "Files" : " Lêers",
-    "Dismiss" : "Ontslaan",
     "Reply" : "Antwoord",
+    "Dismiss" : "Ontslaan",
     "Contact" : "Kontak",
     "Today" : "Vandag",
     "Yesterday" : "Gister",
     "Group" : "Groep",
     "Settings" : "Instellings",
-    "Send" : "Stuur",
     "Join" : "Sluit aan",
     "guest" : "gas",
     "Promote to moderator" : "Bevorder na moderator",
@@ -323,6 +323,7 @@ OC.L10N.register(
     "Default" : "Verstek",
     "The password is wrong. Try again." : "Die wagwoord is verkeerd. Probeer weer.",
     "Android app" : "Android-toep",
-    "iOS app" : "iOS-toep"
+    "iOS app" : "iOS-toep",
+    "Send" : "Stuur"
 },
 "nplurals=2; plural=(n != 1);");

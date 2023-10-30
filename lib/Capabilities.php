@@ -5,6 +5,7 @@ declare(strict_types=1);
  * @copyright Copyright (c) 2018, Joas Schilling <coding@schilljs.com>
  *
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Kate Döen <kate.doeen@nextcloud.com>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -52,6 +53,48 @@ class Capabilities implements IPublicCapability {
 		$this->talkCache = $cacheFactory->createLocal('talk::');
 	}
 
+	/**
+	 * @return array{
+	 *      spreed: array{
+	 *          features: string[],
+	 *          config: array{
+	 *              attachments: array{
+	 *                  allowed: bool,
+	 *                  folder?: string,
+	 *              },
+	 *              call: array{
+	 *                  enabled: bool,
+	 *                  breakout-rooms: bool,
+	 *                  recording: bool,
+	 *                  recording-consent: int,
+	 *                  supported-reactions: string[],
+	 *                  predefined-backgrounds: string[],
+	 *                  can-upload-background: bool,
+	 *                  sip-enabled: bool,
+	 *                  sip-dialout-enabled: bool,
+	 *                  can-enable-sip: bool,
+	 *              },
+	 *              chat: array{
+	 *                  max-length: int,
+	 *                  read-privacy: int,
+	 *                  has-translation-providers: bool,
+	 *                  typing-privacy: int,
+	 *              },
+	 *              conversations: array{
+	 *                  can-create: bool,
+	 *              },
+	 *              previews: array{
+	 *                  max-gif-size: int,
+	 *              },
+	 *              signaling: array{
+	 *                  session-ping-limit: int,
+	 *                  hello-v2-token-key?: string,
+	 *              },
+	 *          },
+	 *          version: string,
+	 *       },
+	 * }|array<empty>
+	 */
 	public function getCapabilities(): array {
 		$user = $this->userSession->getUser();
 		if ($user instanceof IUser && $this->talkConfig->isDisabledForUser($user)) {
@@ -122,6 +165,11 @@ class Capabilities implements IPublicCapability {
 				'remind-me-later',
 				'bots-v1',
 				'markdown-messages',
+				'media-caption',
+				'session-state',
+				'note-to-self',
+				'recording-consent',
+				'sip-support-dialout',
 			],
 			'config' => [
 				'attachments' => [
@@ -131,13 +179,15 @@ class Capabilities implements IPublicCapability {
 					'enabled' => ((int) $this->serverConfig->getAppValue('spreed', 'start_calls', (string) Room::START_CALL_EVERYONE)) !== Room::START_CALL_NOONE,
 					'breakout-rooms' => $this->talkConfig->isBreakoutRoomsEnabled(),
 					'recording' => $this->talkConfig->isRecordingEnabled(),
+					'recording-consent' => $this->talkConfig->recordingConsentRequired(),
 					'supported-reactions' => ['❤️', '🎉', '👏', '👍', '👎', '😂', '🤩', '🤔', '😲', '😥'],
+					'sip-enabled' => $this->talkConfig->isSIPConfigured(),
+					'sip-dialout-enabled' => $this->talkConfig->isSIPDialOutEnabled(),
 				],
 				'chat' => [
 					'max-length' => ChatManager::MAX_CHAT_LENGTH,
 					'read-privacy' => Participant::PRIVACY_PUBLIC,
-					// Transform the JsonSerializable language tuples to arrays
-					'translations' => json_decode(json_encode($this->translationManager->getLanguages()), true),
+					'has-translation-providers' => $this->translationManager->hasProviders(),
 					'typing-privacy' => Participant::PRIVACY_PUBLIC,
 				],
 				'conversations' => [
@@ -176,14 +226,18 @@ class Capabilities implements IPublicCapability {
 			$capabilities['features'][] = 'chat-reference-id';
 		}
 
-		$predefinedBackgrounds = $this->talkCache->get('predefined_backgrounds');
-		if ($predefinedBackgrounds !== null) {
+		/** @var ?string[] $predefinedBackgrounds */
+		$predefinedBackgrounds = null;
+		$cachedPredefinedBackgrounds = $this->talkCache->get('predefined_backgrounds');
+		if ($cachedPredefinedBackgrounds !== null) {
 			// Try using cached value
-			$predefinedBackgrounds = json_decode($predefinedBackgrounds, true);
+			/** @var string[]|null $predefinedBackgrounds */
+			$predefinedBackgrounds = json_decode($cachedPredefinedBackgrounds, true);
 		}
 
 		if (!is_array($predefinedBackgrounds)) {
 			// Cache was empty or invalid, regenerate
+			/** @var string[] $predefinedBackgrounds */
 			$predefinedBackgrounds = [];
 			if (file_exists(__DIR__ . '/../img/backgrounds')) {
 				$directoryIterator = new \DirectoryIterator(__DIR__ . '/../img/backgrounds');
@@ -212,8 +266,10 @@ class Capabilities implements IPublicCapability {
 				$quota = Util::computerFileSize($quota);
 			}
 			$capabilities['config']['call']['can-upload-background'] = $quota === 'none' || $quota > 0;
+			$capabilities['config']['call']['can-enable-sip'] = $this->talkConfig->canUserEnableSIP($user);
 		} else {
 			$capabilities['config']['call']['can-upload-background'] = false;
+			$capabilities['config']['call']['can-enable-sip'] = false;
 		}
 
 		return [

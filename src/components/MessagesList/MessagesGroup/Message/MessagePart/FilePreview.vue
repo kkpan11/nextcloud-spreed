@@ -28,11 +28,11 @@
 		class="file-preview"
 		:class="{ 'file-preview--viewer-available': isViewerAvailable,
 			'file-preview--upload-editor': isUploadEditor,
-			'file-preview--shared-items-grid': isSharedItemsTab && !rowLayout,
+			'file-preview--shared-items-grid': isSharedItems && !rowLayout,
 			'file-preview--row-layout': rowLayout }"
 		@click.exact="handleClick"
 		@keydown.enter="handleClick">
-		<div v-if="!isLoading"
+		<div v-if="!isLoading || fallbackLocalUrl"
 			class="image-container"
 			:class="{'playable': isPlayable}">
 			<span v-if="isPlayable && !smallPreview" class="play-video-button">
@@ -85,6 +85,8 @@ import Tooltip from '@nextcloud/vue/dist/Directives/Tooltip.js'
 import AudioPlayer from './AudioPlayer.vue'
 
 import { useViewer } from '../../../../../composables/useViewer.js'
+import { SHARED_ITEM } from '../../../../../constants.js'
+import { useSharedItemsStore } from '../../../../../stores/sharedItems.js'
 
 const PREVIEW_TYPE = {
 	TEMPORARY: 0,
@@ -108,12 +110,23 @@ export default {
 	},
 
 	props: {
+		token: {
+			type: String,
+			required: true,
+		},
 		/**
 		 * File id
 		 */
 		id: {
 			type: String,
 			required: true,
+		},
+		/**
+		 * Reference id from the message
+		 */
+		referenceId: {
+			type: String,
+			default: '',
 		},
 		/**
 		 * File name
@@ -219,27 +232,33 @@ export default {
 			default: '',
 		},
 
-		isVoiceMessage: {
-			type: Boolean,
-			default: false,
-		},
-
 		rowLayout: {
 			type: Boolean,
 			default: false,
 		},
 
-		isSharedItemsTab: {
+		isSharedItems: {
 			type: Boolean,
 			default: false,
+		},
+
+		itemType: {
+			type: String,
+			default: '',
 		},
 	},
 
 	emits: ['remove-file'],
 
 	setup() {
-		const { openViewer } = useViewer()
-		return { openViewer }
+		const { openViewer, generateViewerObject } = useViewer()
+		const sharedItemsStore = useSharedItemsStore()
+
+		return {
+			openViewer,
+			generateViewerObject,
+			sharedItemsStore,
+		}
 	},
 
 	data() {
@@ -250,7 +269,7 @@ export default {
 	},
 	computed: {
 		shouldShowFileDetail() {
-			if (this.isSharedItemsTab && !this.rowLayout) {
+			if (this.isSharedItems && !this.rowLayout) {
 				return false
 			}
 			// display the file detail below the preview if the preview
@@ -269,6 +288,10 @@ export default {
 
 		fileDetail() {
 			return this.name
+		},
+
+		fallbackLocalUrl() {
+			return this.$store.getters.getLocalUrl(this.referenceId)
 		},
 
 		previewTooltip() {
@@ -290,7 +313,7 @@ export default {
 				return {
 					is: 'div',
 				}
-			} else if (this.isVoiceMessage) {
+			} else if (this.isVoiceMessage && !this.isSharedItems) {
 				return {
 					is: AudioPlayer,
 					name: this.name,
@@ -307,7 +330,7 @@ export default {
 		},
 
 		defaultIconUrl() {
-			return imagePath('core', 'filetypes/file')
+			return OC.MimeType.getIconUrl(this.mimetype) || imagePath('core', 'filetypes/file')
 		},
 
 		previewImageClass() {
@@ -322,7 +345,10 @@ export default {
 
 			if (this.failed || this.previewType === PREVIEW_TYPE.MIME_ICON || this.rowLayout) {
 				classes += 'mimeicon'
+			} else if (this.previewAvailable === 'yes') {
+				classes += 'media'
 			}
+
 			return classes
 		},
 
@@ -347,6 +373,9 @@ export default {
 
 			if (this.previewType === PREVIEW_TYPE.TEMPORARY) {
 				return this.localUrl
+			}
+			if (this.fallbackLocalUrl) {
+				return this.fallbackLocalUrl
 			}
 			if (this.previewType === PREVIEW_TYPE.MIME_ICON || this.rowLayout) {
 				return OC.MimeType.getIconUrl(this.mimetype)
@@ -400,6 +429,10 @@ export default {
 			return false
 		},
 
+		isVoiceMessage() {
+			return this.itemType === SHARED_ITEM.TYPES.VOICE
+		},
+
 		isPlayable() {
 			// don't show play button for direct renders
 			if (this.failed || !this.isViewerAvailable || this.previewType !== PREVIEW_TYPE.PREVIEW) {
@@ -411,11 +444,7 @@ export default {
 		},
 
 		internalAbsolutePath() {
-			if (this.path.startsWith('/')) {
-				return this.path
-			}
-
-			return '/' + this.path
+			return this.path.startsWith('/') ? this.path : '/' + this.path
 		},
 
 		isTemporaryUpload() {
@@ -472,44 +501,31 @@ export default {
 			event.stopPropagation()
 			event.preventDefault()
 
-			let permissions = ''
-			if (this.permissions) {
-				if (this.permissions & OC.PERMISSION_CREATE) {
-					permissions += 'CK'
-				}
-				if (this.permissions & OC.PERMISSION_READ) {
-					permissions += 'G'
-				}
-				if (this.permissions & OC.PERMISSION_UPDATE) {
-					permissions += 'W'
-				}
-				if (this.permissions & OC.PERMISSION_DELETE) {
-					permissions += 'D'
-				}
-				if (this.permissions & OC.PERMISSION_SHARE) {
-					permissions += 'R'
-				}
-			}
+			const fileInfo = this.generateViewerObject(this)
 
-			this.openViewer(this.internalAbsolutePath, [
-				{
-					fileid: parseInt(this.id, 10),
-					filename: this.internalAbsolutePath,
-					basename: this.name,
-					mime: this.mimetype,
-					hasPreview: this.previewAvailable === 'yes',
-					etag: this.etag,
-					permissions,
-				},
-			])
+			if (this.itemType === SHARED_ITEM.TYPES.MEDIA) {
+				const getRevertedList = (items) => Object.values(items).reverse()
+					.map(item => this.generateViewerObject(item.messageParameters.file))
+
+				// Get available media files from store and put them to the list to navigate through slides
+				const mediaFiles = this.sharedItemsStore.sharedItems(this.token).media
+				const list = getRevertedList(mediaFiles)
+				const loadMore = async () => {
+					const { messages } = await this.sharedItemsStore.getSharedItems(this.token, SHARED_ITEM.TYPES.MEDIA)
+					return getRevertedList(messages)
+				}
+
+				this.openViewer(this.internalAbsolutePath, list, fileInfo, loadMore)
+			} else {
+				this.openViewer(this.internalAbsolutePath, [fileInfo], fileInfo)
+
+			}
 		},
 	},
 }
 </script>
 
 <style lang="scss" scoped>
-@import '../../../../../assets/variables';
-
 .file-preview {
 	position: relative;
 	min-width: 0;
@@ -523,15 +539,23 @@ export default {
 
 	box-sizing: content-box !important;
 	&:hover,
-	&:focus {
+	&:focus,
+	&:focus-visible {
 		background-color: var(--color-background-hover);
+		outline: none;
+
 		.remove-file {
 			visibility: visible;
+		}
+
+		.file-preview__image.media {
+			outline: 2px solid var(--color-primary-element);
 		}
 	}
 
 	&__image {
 		object-fit: cover;
+		transition: outline 0.1s ease-in-out;
 	}
 
 	.loading {
@@ -554,12 +578,14 @@ export default {
 		max-width: 100%;
 		max-height: 384px;
 	}
+
 	.preview-medium {
 		display: inline-block;
 		border-radius: var(--border-radius);
 		max-width: 100%;
 		max-height: 192px;
 	}
+
 	.preview-small {
 		display: inline-block;
 		border-radius: var(--border-radius);
@@ -612,6 +638,7 @@ export default {
 			content: ' ↗';
 		}
 	}
+
 	&--upload-editor {
 		max-width: 140px;
 		max-height: 140px;
@@ -623,6 +650,7 @@ export default {
 			width: 128px;
 			height: 128px;
 		}
+
 		.loading {
 			width: 100%;
 		}
@@ -651,6 +679,7 @@ export default {
 
 	&--shared-items-grid {
 		aspect-ratio: 1;
+
 		.preview {
 			width: 100%;
 			min-height: unset;

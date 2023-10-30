@@ -1,11 +1,14 @@
 OC.L10N.register(
     "spreed",
     {
+    "Other activities" : "กิจกรรมอื่น ๆ",
     "File is too big" : "ไฟล์ใหญ่เกินไป",
     "Invalid file provided" : "ไฟล์ที่ระบุไม่ถูกต้อง",
     "Invalid image" : "รูปภาพไม่ถูกต้อง",
     "Unknown filetype" : "ชนิดไฟล์ที่ไม่รู้จัก",
     "Dismiss notification" : "ปิดการแจ้งเตือน",
+    "Accept" : "ยอมรับ",
+    "Decline" : "ปฏิเสธ",
     "Open settings" : "เปิดการตั้งค่า",
     "Invalid date, date format must be YYYY-MM-DD" : "วันที่ไม่ถูกต้อง รูปแบบวันที่จะต้องเป็น ปปปป-ดด-วว",
     "Conversation not found" : "ไม่พบการสนทนา",
@@ -59,16 +62,15 @@ OC.L10N.register(
     "Upload" : "อัปโหลด",
     "Files" : "ไฟล์",
     "Invalid path selected" : "เลือกเส้นทางไม่ถูกต้อง",
-    "Dismiss" : "ปิดทิ้ง",
     "Reply" : "ตอบกลับ",
     "Translate" : "แปลภาษา",
+    "Dismiss" : "ปิดทิ้ง",
     "Today" : "วันนี้",
     "Yesterday" : "เมื่อวาน",
     "Group" : "กลุ่ม",
     "New file" : "ไฟล์ใหม่",
     "Blank" : "ว่าง",
     "Settings" : "การตั้งค่า",
-    "Send" : "ส่ง",
     "bot" : "บอต",
     "guest" : "ผู้เยี่ยมชม",
     "Searching …" : "กำลังค้นหา …",
@@ -90,6 +92,7 @@ OC.L10N.register(
     "Default" : "ค่าเริ่มต้น",
     "The password is wrong. Try again." : "รหัสผ่านไม่ถูกต้อง กรุณาลองอีกครั้ง",
     "Android app" : "แอป Android",
-    "iOS app" : "แอป iOS"
+    "iOS app" : "แอป iOS",
+    "Send" : "ส่ง"
 },
 "nplurals=1; plural=0;");

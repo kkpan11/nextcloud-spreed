@@ -3,7 +3,7 @@
   -
   - @author Marco Ambrosini <marcoambrosini@icloud.com>
   -
-  - @license GNU AGPL version 3 or any later version
+  - @license AGPL-3.0-or-later
   -
   - This program is free software: you can redistribute it and/or modify
   - it under the terms of the GNU Affero General Public License as
@@ -22,20 +22,29 @@
 <template>
 	<div ref="wrapper" class="set-contacts">
 		<!-- Search -->
-		<NcTextField ref="setContacts"
-			v-observe-visibility="visibilityChanged"
-			:value.sync="searchText"
-			type="text"
-			:label="t('spreed', 'Search participants')"
-			:show-trailing-button="isSearching"
-			:trailing-button-label="cancelSearchLabel"
-			@trailing-button-click="abortSearch"
-			@input="handleInput">
-			<Magnify :size="16" />
-			<template #trailing-button-icon>
-				<Close :size="20" />
-			</template>
-		</NcTextField>
+		<div class="set-contacts__form">
+			<NcTextField ref="setContacts"
+				v-observe-visibility="visibilityChanged"
+				:value.sync="searchText"
+				type="text"
+				class="set-contacts__form-input"
+				:label="textFieldLabel"
+				:show-trailing-button="isSearching"
+				:trailing-button-label="cancelSearchLabel"
+				@trailing-button-click="abortSearch"
+				@input="handleInput">
+				<Magnify :size="16" />
+				<template #trailing-button-icon>
+					<Close :size="20" />
+				</template>
+			</NcTextField>
+			<DialpadPanel v-if="canModerateSipDialOut"
+				container=".set-contacts__form"
+				:value.sync="searchText"
+				@submit="addParticipantPhone" />
+		</div>
+
+		<!-- Selected results -->
 		<TransitionWrapper v-if="hasSelectedParticipants"
 			class="selected-participants"
 			name="zoom"
@@ -45,6 +54,13 @@
 				:key="participant.source + participant.id"
 				:participant="participant" />
 		</TransitionWrapper>
+
+		<!-- Search results -->
+		<SelectPhoneNumber v-if="canModerateSipDialOut"
+			:name="t('spreed', 'Add a phone number')"
+			:value="searchText"
+			:participant-phone-item.sync="participantPhoneItem"
+			@select="addParticipantPhone" />
 		<ParticipantSearchResults :add-on-click="false"
 			:search-results="searchResults"
 			:contacts-loading="contactsLoading"
@@ -67,7 +83,9 @@ import { showError } from '@nextcloud/dialogs'
 
 import NcTextField from '@nextcloud/vue/dist/Components/NcTextField.js'
 
+import DialpadPanel from '../../../DialpadPanel.vue'
 import ParticipantSearchResults from '../../../RightSidebar/Participants/ParticipantsSearchResults/ParticipantsSearchResults.vue'
+import SelectPhoneNumber from '../../../SelectPhoneNumber.vue'
 import TransitionWrapper from '../../../TransitionWrapper.vue'
 import ContactSelectionBubble from './ContactSelectionBubble/ContactSelectionBubble.vue'
 
@@ -78,12 +96,15 @@ import CancelableRequest from '../../../../utils/cancelableRequest.js'
 export default {
 	name: 'SetContacts',
 	components: {
-		Close,
-		ParticipantSearchResults,
 		ContactSelectionBubble,
+		DialpadPanel,
 		NcTextField,
-		Magnify,
+		ParticipantSearchResults,
+		SelectPhoneNumber,
 		TransitionWrapper,
+		// Icons
+		Close,
+		Magnify,
 	},
 
 	props: {
@@ -91,16 +112,22 @@ export default {
 			type: String,
 			required: true,
 		},
+
+		canModerateSipDialOut: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	setup() {
 		const wrapper = ref(null)
 		const setContacts = ref(null)
 
-		const { initializeNavigation } = useArrowNavigation(wrapper, setContacts)
+		const { initializeNavigation, resetNavigation } = useArrowNavigation(wrapper, setContacts, '.participant-row')
 
 		return {
 			initializeNavigation,
+			resetNavigation,
 			wrapper,
 			setContacts,
 		}
@@ -115,6 +142,7 @@ export default {
 			// with an empty screen as search text.
 			contactsLoading: true,
 			noResults: false,
+			participantPhoneItem: {},
 			cancelSearchPossibleConversations: () => {},
 		}
 	},
@@ -139,7 +167,11 @@ export default {
 		isSearching() {
 			return this.searchText !== ''
 		},
-
+		textFieldLabel() {
+			return this.canModerateSipDialOut
+				? t('spreed', 'Search participants or phone numbers')
+				: t('spreed', 'Search participants')
+		},
 		cancelSearchLabel() {
 			return t('spreed', 'Cancel search')
 		},
@@ -172,10 +204,12 @@ export default {
 			this.contactsLoading = false
 			this.searchResults = this.cachedFullSearchResults
 			this.searchText = ''
+			this.participantPhoneItem = {}
 			this.focusInput()
 		},
 
 		debounceFetchSearchResults: debounce(function() {
+			this.resetNavigation()
 			this.fetchSearchResults()
 		}, 250),
 
@@ -196,7 +230,7 @@ export default {
 					this.cachedFullSearchResults = this.searchResults
 				}
 				this.$nextTick(() => {
-					this.initializeNavigation('.participant-row')
+					this.initializeNavigation()
 				})
 			} catch (exception) {
 				if (CancelableRequest.isCancel(exception)) {
@@ -217,6 +251,14 @@ export default {
 		focusInput() {
 			this.setContacts.focus()
 		},
+
+		addParticipantPhone() {
+			if (!this.participantPhoneItem?.phoneNumber) {
+				return
+			}
+
+			this.$store.dispatch('updateSelectedParticipants', this.participantPhoneItem)
+		}
 	},
 }
 </script>
@@ -230,6 +272,16 @@ export default {
 	&__hint {
 		margin-top: 20px;
 		text-align: center;
+	}
+
+	&__form {
+		display: flex;
+		align-items: center;
+		gap: var(--default-grid-baseline);
+
+		&-input {
+			margin: 0;
+		}
 	}
 }
 

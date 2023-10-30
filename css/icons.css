@@ -27,6 +27,16 @@
 	background-image: url(../img/icon-contacts-white.svg);
 }
 
+.app-talk .icon-phone,
+.talk-modal .icon-phone,
+.sidebar-callview .icon-phone,
+#talk-panel .icon-phone,
+#talk-sidebar .icon-phone,
+#call-container .icon-phone,
+.talkChatTab .icon-phone {
+	background-image: url(../img/icon-phone-white.svg);
+}
+
 .app-talk .icon-password,
 .talk-modal .icon-password,
 .sidebar-callview .icon-password,
@@ -71,12 +81,12 @@
  * .app-Talk rules above.
  * "forced-white" needs to be included in the class name as the Avatar does
  * not accept several classes. */
-.mention-bubble__icon.icon-group-forced-white,
+.user-bubble__avatar .avatar-class-icon.icon-group-forced-white,
 .tribute-container .icon-group-forced-white {
 	background-image: url(../img/icon-contacts-white.svg);
 }
 
-.mention-bubble__icon.icon-user-forced-white,
+.user-bubble__avatar .avatar-class-icon.icon-user-forced-white,
 .tribute-container .icon-user-forced-white {
 	background-image: url(../img/icon-user-white.svg)
 }

@@ -8,14 +8,16 @@
 * `3` Public
 * `4` Changelog
 * `5` Former "One to one" (When a user is deleted from the server or removed from all their conversations, `1` "One to one" rooms are converted to this type)
+* `6` Note to self 
 
 ### Object types
 
-| Constant         | Can be created | Description                                                      | Object ID                             |
-|------------------|----------------|------------------------------------------------------------------|---------------------------------------|
-| `file`           | No             | Conversations about a file in the right sidebar of the files app | File ID                               |
-| `share:password` | No             | Video verification to verify the identity of the share recipient | Share token                           |
-| `room`           | Yes            | Room is a breakout room                                          | Token of the main/parent conversation |
+| Constant         | Can be created | Description                                                      | Object ID                                               |
+|------------------|----------------|------------------------------------------------------------------|---------------------------------------------------------|
+| `file`           | No             | Conversations about a file in the right sidebar of the files app | File ID                                                 |
+| `share:password` | No             | Video verification to verify the identity of the share recipient | Share token                                             |
+| `room`           | Yes            | Room is a breakout room                                          | Token of the main/parent conversation                   |
+| `phone`          | Yes            | Room is created when calling a phone number with SIP dial-out    | `phone` (not set atm, just used for the default avatar) |
 
 ### Read-only states
 * `0` Read-write
@@ -23,7 +25,7 @@
 
 ### Listable scope
 * `0` Participants only
-* `1` Regular users only, excluding guest app users
+* `1` Regular users only, excluding users created with the Guests app
 * `2` Everyone
 
 ### Webinar lobby states
@@ -109,6 +111,10 @@
 * `bots` - Used by commands (actor-id is the used `/command`) and the changelog conversation (actor-id is `changelog`)
 * `bridged` - Users whose messages are bridged in by the [Matterbridge integration](matterbridge.md)
 
+### Session states
+* `0` - Inactive (Notifications should still be sent, even though the user has this session in the room)
+* `1` - Active (No notifications should be sent)
+
 ## Call
 
 ### Start call
@@ -124,6 +130,11 @@
 * `3` - Starting video recording
 * `4` - Starting audio recording
 * `5` - Recording failed
+
+### Recording consent required
+* `0` - No recording consent is required to join a call
+* `1` - Recording consent is required
+* `2` - Recording consent can be enabled by moderators on conversation level
 
 ## Chat
 

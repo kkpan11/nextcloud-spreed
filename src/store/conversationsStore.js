@@ -36,6 +36,7 @@ import {
 	makePublic,
 	makePrivate,
 	setSIPEnabled,
+	setRecordingConsent,
 	changeLobbyState,
 	changeReadOnlyState,
 	changeListable,
@@ -117,7 +118,7 @@ const getters = {
 	conversationsList: state => {
 		return Object.values(state.conversations)
 			// Filter out breakout rooms
-			.filter(conversation => conversation.objectType !== 'room')
+			.filter(conversation => conversation.objectType !== CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM)
 			// Sort by isFavorite and lastActivity
 			.sort((conversation1, conversation2) => {
 				if (conversation1.isFavorite !== conversation2.isFavorite) {
@@ -565,6 +566,18 @@ const actions = {
 		commit('addConversation', conversation)
 	},
 
+	async setRecordingConsent({ commit, getters }, { token, state }) {
+		if (!getters.conversations[token]) {
+			return
+		}
+
+		await setRecordingConsent(token, state)
+
+		const conversation = Object.assign({}, getters.conversations[token], { recordingConsent: state })
+
+		commit('addConversation', conversation)
+	},
+
 	async setConversationProperties({ commit, getters }, { token, properties }) {
 		if (!getters.conversations[token]) {
 			return
@@ -580,7 +593,7 @@ const actions = {
 			return
 		}
 
-		commit('updateUnreadMessages', { token, unreadMessages: 0, unreadMention: false })
+		commit('updateUnreadMessages', { token, unreadMessages: 0, unreadMention: false, unreadMentionDirect: false })
 	},
 
 	async markConversationUnread({ commit, dispatch, getters }, { token }) {

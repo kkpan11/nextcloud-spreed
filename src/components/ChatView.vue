@@ -23,6 +23,7 @@
 		@dragover.prevent="handleDragOver"
 		@dragleave.prevent="handleDragLeave"
 		@drop.prevent="handleDropFiles">
+		<GuestWelcomeWindow v-if="isGuestWithoutDisplayName" :token="token" />
 		<TransitionWrapper name="slide-up" mode="out-in">
 			<div v-show="isDraggingOver"
 				class="dragover">
@@ -50,6 +51,10 @@
 			:container="containerId"
 			has-typing-indicator
 			:aria-label="t('spreed', 'Post message')" />
+
+		<!-- File upload dialog -->
+		<NewMessageUploadEditor />
+
 		<TransitionWrapper name="fade">
 			<NcButton v-show="!isChatScrolledToBottom"
 				type="secondary"
@@ -70,8 +75,10 @@ import ChevronDoubleDown from 'vue-material-design-icons/ChevronDoubleDown.vue'
 
 import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
 
+import GuestWelcomeWindow from './GuestWelcomeWindow.vue'
 import MessagesList from './MessagesList/MessagesList.vue'
 import NewMessage from './NewMessage/NewMessage.vue'
+import NewMessageUploadEditor from './NewMessage/NewMessageUploadEditor.vue'
 import TransitionWrapper from './TransitionWrapper.vue'
 
 import { CONVERSATION } from '../constants.js'
@@ -86,7 +93,9 @@ export default {
 		ChevronDoubleDown,
 		MessagesList,
 		NewMessage,
+		NewMessageUploadEditor,
 		TransitionWrapper,
+		GuestWelcomeWindow,
 	},
 
 	props: {
@@ -109,6 +118,12 @@ export default {
 		isGuest() {
 			return this.$store.getters.getActorType() === 'guests'
 		},
+
+		isGuestWithoutDisplayName() {
+			const userName = this.$store.getters.getDisplayName()
+			return !userName && this.isGuest
+		},
+
 		dropHintText() {
 			if (this.isGuest) {
 				return t('spreed', 'You need to be logged in to upload files')
@@ -200,8 +215,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../assets/variables';
-
 .chatView {
 	width: 100%;
 	height: 100%;

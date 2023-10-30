@@ -47,20 +47,22 @@ the main body of the message as well as a quote.
 					class="message-body__main__text">
 					<Quote v-if="parent" v-bind="parent" />
 					<div class="single-emoji">
-						{{ message }}
+						{{ renderedMessage }}
 					</div>
 				</div>
 				<div v-else-if="showJoinCallButton" class="message-body__main__text call-started">
-					<NcRichText :text="message"
+					<NcRichText :text="renderedMessage"
 						:arguments="richParameters"
 						autolink
+						dir="auto"
 						:reference-limit="0" />
 					<CallButton />
 				</div>
 				<div v-else-if="showResultsButton || isSystemMessage" class="message-body__main__text system-message">
-					<NcRichText :text="message"
+					<NcRichText :text="renderedMessage"
 						:arguments="richParameters"
 						autolink
+						dir="auto"
 						:reference-limit="0" />
 					<!-- Displays only the "see results" button with the results modal -->
 					<Poll v-if="showResultsButton"
@@ -70,18 +72,36 @@ the main body of the message as well as a quote.
 						show-as-button />
 				</div>
 				<div v-else-if="isDeletedMessage" class="message-body__main__text deleted-message">
-					<NcRichText :text="message"
+					<NcRichText :text="renderedMessage"
 						:arguments="richParameters"
 						autolink
+						dir="auto"
 						:reference-limit="0" />
 				</div>
-				<div v-else class="message-body__main__text message-body__main__text--markdown">
+				<div v-else
+					class="message-body__main__text message-body__main__text--markdown"
+					@mouseover="handleMarkdownMouseOver"
+					@mouseleave="handleMarkdownMouseLeave">
 					<Quote v-if="parent" v-bind="parent" />
-					<NcRichText :text="message"
+					<NcRichText :text="renderedMessage"
 						:arguments="richParameters"
 						autolink
+						dir="auto"
 						:use-markdown="markdown"
 						:reference-limit="1" />
+
+					<NcButton v-if="containsCodeBlocks"
+						v-show="currentCodeBlock !== null"
+						class="message-copy-code"
+						type="tertiary"
+						:aria-label="t('spreed', 'Copy code block')"
+						:title="t('spreed', 'Copy code block')"
+						:style="{top: copyButtonOffset}"
+						@click="copyCodeBlock">
+						<template #icon>
+							<ContentCopy :size="16" />
+						</template>
+					</NcButton>
 				</div>
 				<div v-if="!isDeletedMessage" class="message-body__main__right">
 					<span :title="messageDate"
@@ -133,17 +153,17 @@ the main body of the message as well as a quote.
 			<div v-if="hasReactions"
 				class="message-body__reactions"
 				@mouseover="handleReactionsMouseOver">
-				<NcPopover v-for="reaction in Object.keys(simpleReactions)"
+				<NcPopover v-for="reaction in Object.keys(reactions)"
 					:key="reaction"
 					:delay="200"
 					:focus-trap="false"
 					:triggers="['hover']">
 					<template #trigger>
-						<NcButton v-if="simpleReactions[reaction] !== 0"
+						<NcButton v-if="reactions[reaction] !== 0"
 							:type="userHasReacted(reaction) ? 'primary' : 'secondary'"
 							class="reaction-button"
 							@click="handleReactionClick(reaction)">
-							{{ reaction }} {{ simpleReactions[reaction] }}
+							{{ reaction }} {{ reactions[reaction] }}
 						</NcButton>
 					</template>
 
@@ -213,7 +233,7 @@ the main body of the message as well as a quote.
 			</div>
 		</div>
 
-		<MessageTranslateDialog v-if="isTranslateDialogOpen"
+		<MessageTranslateDialog v-if="isTranslationAvailable && isTranslateDialogOpen"
 			:message="message"
 			:rich-parameters="richParameters"
 			@close="isTranslateDialogOpen = false" />
@@ -233,6 +253,7 @@ import emojiRegex from 'emoji-regex/index.js'
 import AlertCircle from 'vue-material-design-icons/AlertCircle.vue'
 import Check from 'vue-material-design-icons/Check.vue'
 import CheckAll from 'vue-material-design-icons/CheckAll.vue'
+import ContentCopy from 'vue-material-design-icons/ContentCopy.vue'
 import EmoticonOutline from 'vue-material-design-icons/EmoticonOutline.vue'
 import Reload from 'vue-material-design-icons/Reload.vue'
 import UnfoldLess from 'vue-material-design-icons/UnfoldLessHorizontal.vue'
@@ -263,8 +284,12 @@ import { useIsInCall } from '../../../../composables/useIsInCall.js'
 import { ATTENDEE, CONVERSATION, PARTICIPANT } from '../../../../constants.js'
 import participant from '../../../../mixins/participant.js'
 import { EventBus } from '../../../../services/EventBus.js'
+import { useGuestNameStore } from '../../../../stores/guestName.js'
+import { getItemTypeFromMessage } from '../../../../utils/getItemTypeFromMessage.js'
 
-const isTranslationAvailable = getCapabilities()?.spreed?.config?.chat?.translations?.length > 0
+const isTranslationAvailable = getCapabilities()?.spreed?.config?.chat?.['has-translation-providers']
+	// Fallback for the desktop client when connecting to Talk 17
+	?? getCapabilities()?.spreed?.config?.chat?.translations?.length > 0
 
 /**
  * @property {object} scrollerBoundingClientRect provided by MessageList.vue
@@ -286,6 +311,7 @@ export default {
 		AlertCircle,
 		Check,
 		CheckAll,
+		ContentCopy,
 		EmoticonOutline,
 		Reload,
 		UnfoldLess,
@@ -431,13 +457,19 @@ export default {
 			type: Array,
 			default: () => { return [] },
 		},
+
+		referenceId: {
+			type: String,
+			default: '',
+		},
 	},
 
 	emits: ['toggle-combined-system-message'],
 
 	setup() {
 		const isInCall = useIsInCall()
-		return { isInCall, isTranslationAvailable }
+		const guestNameStore = useGuestNameStore()
+		return { isInCall, isTranslationAvailable, guestNameStore }
 	},
 
 	expose: ['highlightMessage'],
@@ -459,6 +491,9 @@ export default {
 			isForwarderOpen: false,
 			detailedReactionsLoading: false,
 			isTranslateDialogOpen: false,
+			codeBlocks: null,
+			currentCodeBlock: null,
+			copyButtonOffset: 0,
 		}
 	},
 
@@ -470,6 +505,15 @@ export default {
 
 		isLastReadMessage() {
 			return !this.isLastMessage && this.id === this.$store.getters.getVisualLastReadMessageId(this.token)
+		},
+
+		renderedMessage() {
+			if (this.messageParameters?.file && this.message !== '{file}') {
+				// Add a new line after file to split content into different paragraphs
+				return '{file}' + '\n\n' + this.message
+			} else {
+				return this.message
+			}
 		},
 
 		messageObject() {
@@ -538,7 +582,7 @@ export default {
 			let match
 			let emojiStrings = ''
 			let emojiCount = 0
-			const trimmedMessage = this.message.trim()
+			const trimmedMessage = this.renderedMessage.trim()
 
 			// eslint-disable-next-line no-cond-assign
 			while (match = regex.exec(trimmedMessage)) {
@@ -558,17 +602,20 @@ export default {
 			Object.keys(this.messageParameters).forEach(function(p) {
 				const type = this.messageParameters[p].type
 				const mimetype = this.messageParameters[p].mimetype
+				const itemType = getItemTypeFromMessage(this.messageObject)
 				if (type === 'user' || type === 'call' || type === 'guest' || type === 'user-group' || type === 'group') {
 					richParameters[p] = {
 						component: Mention,
 						props: this.messageParameters[p],
 					}
 				} else if (type === 'file' && mimetype !== 'text/vcard') {
-					const parameters = this.messageParameters[p]
-					parameters['is-voice-message'] = this.messageType === 'voice-message'
 					richParameters[p] = {
 						component: FilePreview,
-						props: parameters,
+						props: Object.assign({
+							token: this.token,
+							itemType,
+							referenceId: this.referenceId,
+						}, this.messageParameters[p]),
 					}
 				} else if (type === 'deck-card') {
 					richParameters[p] = {
@@ -669,7 +716,7 @@ export default {
 		},
 
 		hasReactions() {
-			return this.$store.getters.hasReactions(this.token, this.id)
+			return Object.keys(this.reactions).length !== 0
 		},
 
 		canReact() {
@@ -679,16 +726,16 @@ export default {
 				&& this.messageObject.messageType !== 'comment_deleted'
 		},
 
-		simpleReactions() {
-			return this.messageObject.reactions
-		},
-
 		detailedReactions() {
 			return this.$store.getters.reactions(this.token, this.id)
 		},
 
 		detailedReactionsLoaded() {
 			return this.$store.getters.reactionsLoaded(this.token, this.id)
+		},
+
+		containsCodeBlocks() {
+			return this.message.includes('```')
 		},
 	},
 
@@ -698,14 +745,50 @@ export default {
 		},
 
 		// Scroll list to the bottom if reaction to the message was added, as it expands the list
-		simpleReactions() {
+		reactions() {
 			EventBus.$emit('scroll-chat-to-bottom-if-sticky')
 		},
 	},
 
+	mounted() {
+		if (!this.containsCodeBlocks) {
+			return
+		}
+
+		this.codeBlocks = Array.from(this.$refs.message?.querySelectorAll('pre'))
+	},
+
 	methods: {
+		handleMarkdownMouseOver(event) {
+			if (!this.containsCodeBlocks) {
+				return
+			}
+
+			const index = this.codeBlocks.findIndex(item => item.contains(event.target))
+			if (index !== -1) {
+				this.currentCodeBlock = index
+				const el = this.codeBlocks[index]
+				this.copyButtonOffset = `${el.offsetTop}px`
+			}
+		},
+
+		handleMarkdownMouseLeave() {
+			this.currentCodeBlock = null
+			this.copyButtonOffset = 0
+		},
+
+		async copyCodeBlock() {
+			const code = this.codeBlocks[this.currentCodeBlock].textContent
+			try {
+				await navigator.clipboard.writeText(code)
+				showSuccess(t('spreed', 'Code block copied to clipboard'))
+			} catch (error) {
+				showError(t('spreed', 'Code block could not be copied'))
+			}
+		},
+
 		userHasReacted(reaction) {
-			return this.reactionsSelf && this.reactionsSelf.includes(reaction)
+			return this.reactionsSelf?.includes(reaction)
 		},
 
 		lastReadMessageVisibilityChanged(isVisible) {
@@ -860,7 +943,7 @@ export default {
 			const displayName = reaction.actorDisplayName.trim()
 
 			if (reaction.actorType === ATTENDEE.ACTOR_TYPE.GUESTS) {
-				return this.$store.getters.getGuestNameWithGuestSuffix(this.token, reaction.actorId)
+				return this.guestNameStore.getGuestNameWithGuestSuffix(this.token, reaction.actorId)
 			}
 
 			if (displayName === '') {
@@ -878,8 +961,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../../../../assets/variables';
-
 .message {
 	position: relative;
 
@@ -892,8 +973,8 @@ export default {
 
 .message-body {
 	padding: 4px;
-	font-size: $chat-font-size;
-	line-height: $chat-line-height;
+	font-size: var(--default-font-size);
+	line-height: var(--default-line-height);
 	position: relative;
 	&__main {
 		display: flex;
@@ -930,6 +1011,10 @@ export default {
 				display: flex;
 				border-radius: var(--border-radius-large);
 				align-items: center;
+				:deep(.rich-text--wrapper) {
+					flex-grow: 1;
+					text-align: start;
+				}
 			}
 
 			&--quote {
@@ -944,7 +1029,7 @@ export default {
 			user-select: none;
 			display: flex;
 			color: var(--color-text-maxcontrast);
-			font-size: $chat-font-size;
+			font-size: var(--default-font-size);
 			flex: 1 0 auto;
 			padding: 0 8px 0 8px;
 		}
@@ -967,7 +1052,7 @@ export default {
 }
 
 .date {
-	margin-right: $clickable-area;
+	margin-right: var(--default-clickable-area);
 	&--self {
 		margin-right: 0;
 	}
@@ -1010,7 +1095,7 @@ export default {
 }
 
 .message-status {
-	width: $clickable-area;
+	width: var(--default-clickable-area);
 	height: 24px;
 	display: flex;
 	justify-content: center;
@@ -1058,16 +1143,22 @@ export default {
 }
 
 .message-body__main__text--markdown {
-	:deep(.rich-text--wrapper) {
-		h1, h2, h3, h4, h5, h6 {
-			font-weight: bold;
-			margin: 12px 0;
-			color: var(--color-text-light);
-		}
+	position: relative;
 
-		h1 {
-			font-size: 32px;
-			line-height: 36px;
+	.message-copy-code {
+		position: absolute;
+		top: 0;
+		right: 4px;
+		margin-top: 4px;
+		background-color: var(--color-background-dark);
+	}
+
+	:deep(.rich-text--wrapper) {
+		text-align: start;
+
+		// Hardcode to prevent RTL affecting on user mentions
+		.rich-text--component {
+			direction: ltr;
 		}
 
 		// Overwrite core styles, otherwise h4 is lesser than default font-size
@@ -1079,14 +1170,10 @@ export default {
 			font-style: italic;
 		}
 
-		ul {
-			padding-left: 20px;
-			list-style-type: disc;
-		}
-
+		ul,
 		ol {
-			padding-left: 20px;
-			list-style-type: decimal;
+			padding-left: 0;
+			padding-inline-start: 15px;
 		}
 
 		pre {
@@ -1094,6 +1181,7 @@ export default {
 			margin: 2px 0;
 			border-radius: var(--border-radius);
 			background-color: var(--color-background-dark);
+			overflow-x: auto;
 
 			& code {
 				margin: 0;
@@ -1110,24 +1198,10 @@ export default {
 		}
 
 		blockquote {
-			position: relative;
-			color: var(--color-text-lighter);
-			padding-left: 10px;
-
-			&::before {
-				content: ' ';
-				position: absolute;
-				top: 0;
-				left: 0;
-				height: 100%;
-				width: 4px;
-				border-radius: 2px;
-				background-color: var(--color-border);
-			}
-		}
-
-		pre {
-			overflow-x: auto;
+			padding-left: 0;
+			padding-inline-start: 13px;
+			border-left: none;
+			border-inline-start: 4px solid var(--color-border);
 		}
 	}
 }

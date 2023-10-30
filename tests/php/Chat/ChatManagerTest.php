@@ -210,7 +210,7 @@ class ChatManagerTest extends TestCase {
 		]);
 	}
 
-	public function dataSendMessage(): array {
+	public static function dataSendMessage(): array {
 		return [
 			'simple message' => ['testUser1', 'testMessage1', '', '0'],
 			'reference id' => ['testUser2', 'testMessage2', 'referenceId2', '0'],
@@ -442,6 +442,8 @@ class ChatManagerTest extends TestCase {
 			'permissions' => Attendee::PERMISSIONS_DEFAULT,
 			'access_token' => '',
 			'remote_id' => '',
+			'phone_number' => '',
+			'call_id' => '',
 		]);
 		$chat = $this->createMock(Room::class);
 		$chat->expects($this->any())
@@ -498,6 +500,8 @@ class ChatManagerTest extends TestCase {
 			'permissions' => Attendee::PERMISSIONS_DEFAULT,
 			'access_token' => '',
 			'remote_id' => '',
+			'phone_number' => '',
+			'call_id' => '',
 		]);
 		$chat = $this->createMock(Room::class);
 		$chat->expects($this->any())
@@ -576,6 +580,8 @@ class ChatManagerTest extends TestCase {
 			'permissions' => Attendee::PERMISSIONS_DEFAULT,
 			'access_token' => '',
 			'remote_id' => '',
+			'phone_number' => '',
+			'call_id' => '',
 		]);
 		$chat = $this->createMock(Room::class);
 		$chat->expects($this->any())
@@ -654,7 +660,7 @@ class ChatManagerTest extends TestCase {
 		$manager->clearHistory($chat, 'users', 'admin');
 	}
 
-	public function dataSearchIsPartOfConversationNameOrAtAll(): array {
+	public static function dataSearchIsPartOfConversationNameOrAtAll(): array {
 		return [
 			'found a in all' => [
 				'a', 'room', true
@@ -697,7 +703,7 @@ class ChatManagerTest extends TestCase {
 		$this->assertEquals($expected, $actual);
 	}
 
-	public function dataAddConversationNotify(): array {
+	public static function dataAddConversationNotify(): array {
 		return [
 			[
 				'',
@@ -765,7 +771,7 @@ class ChatManagerTest extends TestCase {
 		$this->assertEquals($expected, $actual);
 	}
 
-	public function dataIsSharedFile(): array {
+	public static function dataIsSharedFile(): array {
 		return [
 			['', false],
 			[json_encode([]), false],
@@ -802,7 +808,7 @@ class ChatManagerTest extends TestCase {
 		$this->assertCount($expectedCount, $result);
 	}
 
-	public function dataFilterCommentsWithNonExistingFiles(): array {
+	public static function dataFilterCommentsWithNonExistingFiles(): array {
 		return [
 			[[], 0],
 			[[json_encode(['parameters' => ['not a shared file']])], 1],

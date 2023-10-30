@@ -5,6 +5,7 @@ declare(strict_types=1);
  * @copyright Copyright (c) 2016 Lukas Reschke <lukas@statuscode.ch>
  *
  * @author Lukas Reschke <lukas@statuscode.ch>
+ * @author Kate Döen <kate.doeen@nextcloud.com>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -41,6 +42,7 @@ use OCP\App\IAppManager;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
+use OCP\AppFramework\Http\Attribute\IgnoreOpenAPI;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UseSession;
@@ -67,6 +69,7 @@ use OCP\Notification\IManager as INotificationManager;
 use OCP\Security\Bruteforce\IThrottler;
 use Psr\Log\LoggerInterface;
 
+#[IgnoreOpenAPI]
 class PageController extends Controller {
 	use TInitialState;
 
@@ -127,19 +130,36 @@ class PageController extends Controller {
 	#[BruteForceProtection(action: 'talkRoomPassword')]
 	public function authenticatePassword(string $token, string $password = ''): Response {
 		// This is the entry point from the `/call/{token}` URL which is hardcoded in the server.
-		return $this->index($token, '', $password);
+		return $this->pageHandler($token, '', $password);
 	}
 
 	#[NoCSRFRequired]
 	#[PublicPage]
 	public function notFound(): Response {
-		return $this->index();
+		return $this->pageHandler();
 	}
 
 	#[NoCSRFRequired]
 	#[PublicPage]
 	public function duplicateSession(): Response {
-		return $this->index();
+		return $this->pageHandler();
+	}
+
+	/**
+	 * @param string $token
+	 * @param string $callUser
+	 * @return TemplateResponse|RedirectResponse
+	 * @throws HintException
+	 */
+	#[NoCSRFRequired]
+	#[PublicPage]
+	#[BruteForceProtection(action: 'talkRoomToken')]
+	#[UseSession]
+	public function index(string $token = '', string $callUser = ''): Response {
+		if ($callUser !== '') {
+			$token = '';
+		}
+		return $this->pageHandler($token, $callUser);
 	}
 
 	/**
@@ -149,11 +169,7 @@ class PageController extends Controller {
 	 * @return TemplateResponse|RedirectResponse
 	 * @throws HintException
 	 */
-	#[NoCSRFRequired]
-	#[PublicPage]
-	#[BruteForceProtection(action: 'talkRoomToken')]
-	#[UseSession]
-	public function index(string $token = '', string $callUser = '', string $password = ''): Response {
+	protected function pageHandler(string $token = '', string $callUser = '', string $password = ''): Response {
 		$bruteForceToken = $token;
 		$user = $this->userSession->getUser();
 		if (!$user instanceof IUser) {

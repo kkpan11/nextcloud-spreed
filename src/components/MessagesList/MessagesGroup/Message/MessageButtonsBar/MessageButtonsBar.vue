@@ -111,6 +111,14 @@
 						</template>
 						{{ t('spreed', 'Go to file') }}
 					</NcActionLink>
+					<NcActionButton v-if="canForwardMessage && !isInNoteToSelf"
+						close-after-click
+						@click="forwardToNote">
+						<template #icon>
+							<Note :size="16" />
+						</template>
+						{{ t('spreed', 'Note to self') }}
+					</NcActionButton>
 					<NcActionButton v-if="canForwardMessage"
 						close-after-click
 						@click.stop="openForwarder">
@@ -233,7 +241,7 @@
 				</NcButton>
 			</NcEmojiPicker>
 		</template>
-		<Forwarder v-if="isForwarderOpen"
+		<MessageForwarder v-if="isForwarderOpen"
 			:message-object="messageObject"
 			@close="closeForwarder" />
 	</div>
@@ -256,6 +264,7 @@ import DeleteIcon from 'vue-material-design-icons/Delete.vue'
 import EmoticonOutline from 'vue-material-design-icons/EmoticonOutline.vue'
 import EyeOffOutline from 'vue-material-design-icons/EyeOffOutline.vue'
 import File from 'vue-material-design-icons/File.vue'
+import Note from 'vue-material-design-icons/NoteEditOutline.vue'
 import OpenInNewIcon from 'vue-material-design-icons/OpenInNew.vue'
 import Plus from 'vue-material-design-icons/Plus.vue'
 import Reply from 'vue-material-design-icons/Reply.vue'
@@ -274,7 +283,7 @@ import NcActionSeparator from '@nextcloud/vue/dist/Components/NcActionSeparator.
 import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
 import NcEmojiPicker from '@nextcloud/vue/dist/Components/NcEmojiPicker.js'
 
-import Forwarder from './Forwarder.vue'
+import MessageForwarder from './MessageForwarder.vue'
 
 import { PARTICIPANT, CONVERSATION, ATTENDEE } from '../../../../../constants.js'
 import { getMessageReminder, removeMessageReminder, setMessageReminder } from '../../../../../services/remindersService.js'
@@ -289,7 +298,7 @@ export default {
 	name: 'MessageButtonsBar',
 
 	components: {
-		Forwarder,
+		MessageForwarder,
 		NcActionButton,
 		NcActionInput,
 		NcActionLink,
@@ -311,6 +320,7 @@ export default {
 		EmoticonOutline,
 		EyeOffOutline,
 		File,
+		Note,
 		OpenInNewIcon,
 		Plus,
 		Reply,
@@ -475,7 +485,7 @@ export default {
 		},
 
 		isDeleteable() {
-			if (this.isConversationReadOnly) {
+			if (this.isConversationReadOnly || this.participant.participantType === PARTICIPANT.TYPE.GUEST) {
 				return false
 			}
 
@@ -504,13 +514,15 @@ export default {
 
 		linkToFile() {
 			if (this.isFileShare) {
-				return this.messageParameters?.file?.link
+				const firstFileKey = (Object.keys(this.messageParameters).find(key => key.startsWith('file')))
+				return this.messageParameters?.[firstFileKey]?.link
+			} else {
+				return ''
 			}
-			return ''
 		},
 
 		isFileShare() {
-			return this.message === '{file}' && this.messageParameters?.file
+			return Object.keys(Object(this.messageParameters)).some(key => key.startsWith('file'))
 		},
 
 		isCurrentGuest() {
@@ -532,8 +544,11 @@ export default {
 
 		isPollMessage() {
 			return this.messageType === 'comment'
-				&& this.message === '{object}'
 				&& this.messageParameters?.object?.type === 'talk-poll'
+		},
+
+		isInNoteToSelf() {
+			return this.conversation.type === CONVERSATION.TYPE.NOTE_TO_SELF
 		},
 
 		canForwardMessage() {
@@ -657,7 +672,7 @@ export default {
 
 		handleReactionClick(selectedEmoji) {
 			// Add reaction only if user hasn't reacted yet
-			if (!this.$store.getters.userHasReacted(this.$store.getters.getActorType(), this.$store.getters.getActorId(), this.token, this.messageObject.id, selectedEmoji)) {
+			if (!this.messageObject.reactionsSelf?.includes(selectedEmoji)) {
 				this.$store.dispatch('addReactionToMessage', {
 					token: this.token,
 					messageId: this.messageObject.id,
@@ -700,6 +715,16 @@ export default {
 		openReactionsMenu() {
 			this.updateFrequentlyUsedEmojis()
 			this.$emit('update:isReactionsMenuOpen', true)
+		},
+
+		async forwardToNote() {
+			try {
+				await this.$store.dispatch('forwardMessage', { messageToBeForwarded: this.messageObject })
+				showSuccess(t('spreed', 'Message forwarded to "Note to self"'))
+			} catch (error) {
+				console.error('Error while forwarding message to "Note to self"', error)
+				showError(t('spreed', 'Error while forwarding message to "Note to self"'))
+			}
 		},
 
 		openForwarder() {

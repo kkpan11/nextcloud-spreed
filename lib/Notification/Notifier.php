@@ -31,19 +31,21 @@ use OCA\Talk\Chat\MessageParser;
 use OCA\Talk\Config;
 use OCA\Talk\Exceptions\ParticipantNotFoundException;
 use OCA\Talk\Exceptions\RoomNotFoundException;
+use OCA\Talk\Federation\FederationManager;
 use OCA\Talk\GuestManager;
 use OCA\Talk\Manager;
 use OCA\Talk\Model\Attendee;
+use OCA\Talk\Model\BotServerMapper;
 use OCA\Talk\Participant;
 use OCA\Talk\Room;
 use OCA\Talk\Service\AvatarService;
 use OCA\Talk\Service\ParticipantService;
 use OCA\Talk\Webinary;
+use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Comments\ICommentsManager;
 use OCP\Comments\NotFoundException;
 use OCP\Files\IRootFolder;
-use OCP\HintException;
 use OCP\IGroupManager;
 use OCP\IL10N;
 use OCP\IURLGenerator;
@@ -82,11 +84,12 @@ class Notifier implements INotifier {
 		protected INotificationManager $notificationManager,
 		CommentsManager $commentManager,
 		protected MessageParser $messageParser,
-		protected IURLGenerator $urlGenerator,
 		protected IRootFolder $rootFolder,
 		protected ITimeFactory $timeFactory,
 		protected Definitions $definitions,
 		protected AddressHandler $addressHandler,
+		protected BotServerMapper $botServerMapper,
+		protected FederationManager $federationManager,
 	) {
 		$this->commentManager = $commentManager;
 	}
@@ -327,7 +330,7 @@ class Notifier implements INotifier {
 			->setParsedLabel($l->t('Share to chat'))
 			->setPrimary(true)
 			->setLink(
-				$this->urlGenerator->linkToOCSRouteAbsolute(
+				$this->url->linkToOCSRouteAbsolute(
 					'spreed.Recording.shareToChat',
 					[
 						'apiVersion' => 'v1',
@@ -341,7 +344,7 @@ class Notifier implements INotifier {
 		$dismissAction = $notification->createAction()
 			->setParsedLabel($l->t('Dismiss notification'))
 			->setLink(
-				$this->urlGenerator->linkToOCSRouteAbsolute(
+				$this->url->linkToOCSRouteAbsolute(
 					'spreed.Recording.notificationDismiss',
 					[
 						'apiVersion' => 'v1',
@@ -392,11 +395,19 @@ class Notifier implements INotifier {
 		return $notification;
 	}
 
-	/**
-	 * @throws HintException
-	 */
 	protected function parseRemoteInvitationMessage(INotification $notification, IL10N $l): INotification {
 		$subjectParameters = $notification->getSubjectParameters();
+
+		try {
+			$invite = $this->federationManager->getRemoteShareById((int) $notification->getObjectId());
+			if ($invite->getUserId() !== $notification->getUser()) {
+				throw new AlreadyProcessedException();
+			}
+			$room = $this->manager->getRoomById($invite->getRoomId());
+		} catch (RoomNotFoundException $e) {
+			// Room does not exist
+			throw new AlreadyProcessedException();
+		}
 
 		[$sharedById, $sharedByServer] = $this->addressHandler->splitUserRemote($subjectParameters['sharedByFederatedId']);
 
@@ -412,7 +423,7 @@ class Notifier implements INotifier {
 			'roomName' => [
 				'type' => 'highlight',
 				'id' => $subjectParameters['serverUrl'] . '::' . $subjectParameters['roomToken'],
-				'name' => $subjectParameters['roomName'],
+				'name' => $room->getName(),
 			],
 			'remoteServer' => [
 				'type' => 'highlight',
@@ -430,6 +441,23 @@ class Notifier implements INotifier {
 				$replacements[] = $parameter['name'];
 			}
 		}
+
+		$acceptAction = $notification->createAction();
+		$acceptAction->setParsedLabel($l->t('Accept'));
+		$acceptAction->setLink($this->url->linkToOCSRouteAbsolute(
+			'spreed.Federation.acceptShare',
+			['apiVersion' => 'v1', 'id' => (int) $notification->getObjectId()]
+		), IAction::TYPE_POST);
+		$acceptAction->setPrimary(true);
+		$notification->addParsedAction($acceptAction);
+
+		$declineAction = $notification->createAction();
+		$declineAction->setParsedLabel($l->t('Decline'));
+		$declineAction->setLink($this->url->linkToOCSRouteAbsolute(
+			'spreed.Federation.rejectShare',
+			['apiVersion' => 'v1', 'id' => (int) $notification->getObjectId()]
+		), IAction::TYPE_DELETE);
+		$notification->addParsedAction($declineAction);
 
 		$notification->setParsedSubject(str_replace($placeholders, $replacements, $message));
 		$notification->setRichSubject($message, $rosParameters);
@@ -454,7 +482,7 @@ class Notifier implements INotifier {
 
 		$richSubjectUser = null;
 		$isGuest = false;
-		if ($subjectParameters['userType'] === 'users') {
+		if ($subjectParameters['userType'] === Attendee::ACTOR_USERS) {
 			$userId = $subjectParameters['userId'];
 			$userDisplayName = $this->userManager->getDisplayName($userId);
 
@@ -463,6 +491,22 @@ class Notifier implements INotifier {
 					'type' => 'user',
 					'id' => $userId,
 					'name' => $userDisplayName,
+				];
+			}
+		} elseif ($subjectParameters['userType'] === Attendee::ACTOR_BOTS) {
+			$botId = $subjectParameters['userId'];
+			try {
+				$bot = $this->botServerMapper->findByUrlHash(substr($botId, strlen(Attendee::ACTOR_BOT_PREFIX)));
+				$richSubjectUser = [
+					'type' => 'highlight',
+					'id' => $botId,
+					'name' => $bot->getName() . ' (Bot)',
+				];
+			} catch (DoesNotExistException $e) {
+				$richSubjectUser = [
+					'type' => 'highlight',
+					'id' => $botId,
+					'name' => 'Bot',
 				];
 			}
 		} else {
@@ -752,7 +796,7 @@ class Notifier implements INotifier {
 			$action->setLabel($l->t('Dismiss reminder'))
 				->setParsedLabel($l->t('Dismiss reminder'))
 				->setLink(
-					$this->urlGenerator->linkToOCSRouteAbsolute(
+					$this->url->linkToOCSRouteAbsolute(
 						'spreed.Chat.deleteReminder',
 						[
 							'apiVersion' => 'v1',
@@ -848,7 +892,7 @@ class Notifier implements INotifier {
 		if ($room->getType() === Room::TYPE_ONE_TO_ONE || $room->getType() === Room::TYPE_ONE_TO_ONE_FORMER) {
 			$subject = $l->t('{user} invited you to a private conversation');
 			if ($this->participantService->hasActiveSessionsInCall($room)) {
-				$notification = $this->addActionButton($notification, $l->t('Join call'));
+				$notification = $this->addActionButton($notification, $l->t('Join call'), true, true);
 			} else {
 				$notification = $this->addActionButton($notification, $l->t('View chat'), false);
 			}
@@ -874,7 +918,7 @@ class Notifier implements INotifier {
 		} elseif (\in_array($room->getType(), [Room::TYPE_GROUP, Room::TYPE_PUBLIC], true)) {
 			$subject = $l->t('{user} invited you to a group conversation: {call}');
 			if ($this->participantService->hasActiveSessionsInCall($room)) {
-				$notification = $this->addActionButton($notification, $l->t('Join call'));
+				$notification = $this->addActionButton($notification, $l->t('Join call'), true, true);
 			} else {
 				$notification = $this->addActionButton($notification, $l->t('View chat'), false);
 			}
@@ -924,7 +968,7 @@ class Notifier implements INotifier {
 			$userDisplayName = $this->userManager->getDisplayName($calleeId);
 			if ($userDisplayName !== null) {
 				if ($this->notificationManager->isPreparingPushNotification() || $this->participantService->hasActiveSessionsInCall($room)) {
-					$notification = $this->addActionButton($notification, $l->t('Answer call'));
+					$notification = $this->addActionButton($notification, $l->t('Answer call'), true, true);
 					$subject = $l->t('{user} would like to talk with you');
 				} else {
 					$notification = $this->addActionButton($notification, $l->t('Call back'));
@@ -954,7 +998,7 @@ class Notifier implements INotifier {
 			}
 		} elseif (\in_array($room->getType(), [Room::TYPE_GROUP, Room::TYPE_PUBLIC], true)) {
 			if ($this->notificationManager->isPreparingPushNotification() || $this->participantService->hasActiveSessionsInCall($room)) {
-				$notification = $this->addActionButton($notification, $l->t('Join call'));
+				$notification = $this->addActionButton($notification, $l->t('Join call'), true, true);
 				$subject = $l->t('A group call has started in {call}');
 			} else {
 				$notification = $this->addActionButton($notification, $l->t('View chat'), false);
@@ -1012,7 +1056,7 @@ class Notifier implements INotifier {
 
 		$callIsActive = $this->notificationManager->isPreparingPushNotification() || $this->participantService->hasActiveSessionsInCall($room);
 		if ($callIsActive) {
-			$notification = $this->addActionButton($notification, $l->t('Answer call'));
+			$notification = $this->addActionButton($notification, $l->t('Answer call'), true, true);
 		} else {
 			$notification = $this->addActionButton($notification, $l->t('Call back'));
 		}
@@ -1051,11 +1095,16 @@ class Notifier implements INotifier {
 		return $notification;
 	}
 
-	protected function addActionButton(INotification $notification, string $label, bool $primary = true): INotification {
+	protected function addActionButton(INotification $notification, string $label, bool $primary = true, bool $directCallLink = false): INotification {
+		$link = $notification->getLink();
+		if ($directCallLink) {
+			$link .= '#direct-call';
+		}
+
 		$action = $notification->createAction();
 		$action->setLabel($label)
 			->setParsedLabel($label)
-			->setLink($notification->getLink(), IAction::TYPE_WEB)
+			->setLink($link, IAction::TYPE_WEB)
 			->setPrimary($primary);
 
 		$notification->addParsedAction($action);

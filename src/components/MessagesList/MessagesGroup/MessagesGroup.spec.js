@@ -1,5 +1,6 @@
 import { createLocalVue, shallowMount } from '@vue/test-utils'
 import { cloneDeep } from 'lodash'
+import { createPinia, setActivePinia } from 'pinia'
 import Vuex from 'vuex'
 
 import MessagesGroup from './MessagesGroup.vue'
@@ -7,21 +8,23 @@ import MessagesSystemGroup from './MessagesSystemGroup.vue'
 
 import { ATTENDEE } from '../../../constants.js'
 import storeConfig from '../../../store/storeConfig.js'
+import { useGuestNameStore } from '../../../stores/guestName.js'
 
 describe('MessagesGroup.vue', () => {
 	const TOKEN = 'XXTOKENXX'
 	let store
 	let localVue
 	let testStoreConfig
-	let getGuestNameMock
+	let guestNameStore
 
 	beforeEach(() => {
 		localVue = createLocalVue()
 		localVue.use(Vuex)
+		setActivePinia(createPinia())
+
+		guestNameStore = useGuestNameStore()
 
 		testStoreConfig = cloneDeep(storeConfig)
-		getGuestNameMock = jest.fn()
-		testStoreConfig.modules.guestNameStore.getters.getGuestName = () => getGuestNameMock
 		// eslint-disable-next-line import/no-named-as-default-member
 		store = new Vuex.Store(testStoreConfig)
 	})
@@ -79,10 +82,10 @@ describe('MessagesGroup.vue', () => {
 			},
 		})
 
-		const avatarEl = wrapper.findComponent({ name: 'AuthorAvatar' })
-		expect(avatarEl.attributes('authortype')).toBe(ATTENDEE.ACTOR_TYPE.USERS)
-		expect(avatarEl.attributes('authorid')).toBe('actor-1')
-		expect(avatarEl.attributes('displayname')).toBe('actor one')
+		const avatarEl = wrapper.findComponent({ name: 'AvatarWrapper' })
+		expect(avatarEl.attributes('source')).toBe(ATTENDEE.ACTOR_TYPE.USERS)
+		expect(avatarEl.attributes('id')).toBe('actor-1')
+		expect(avatarEl.attributes('name')).toBe('actor one')
 
 		const authorEl = wrapper.find('.messages__author')
 		expect(authorEl.text()).toBe('actor one')
@@ -152,7 +155,7 @@ describe('MessagesGroup.vue', () => {
 			},
 		})
 
-		const avatarEl = wrapper.findComponent({ name: 'AuthorAvatar' })
+		const avatarEl = wrapper.findComponent({ name: 'AvatarWrapper' })
 		expect(avatarEl.exists()).toBe(false)
 
 		const messagesEl = wrapper.findAllComponents({ name: 'Message' })
@@ -179,7 +182,13 @@ describe('MessagesGroup.vue', () => {
 	})
 
 	test('renders guest display name', () => {
-		getGuestNameMock.mockReturnValue('guest-one-display-name')
+		// Arrange
+		guestNameStore.addGuestName({
+			token: TOKEN,
+			actorId: 'actor-1',
+			actorDisplayName: 'guest-one-display-name',
+		}, { noUpdate: false })
+
 		const wrapper = shallowMount(MessagesGroup, {
 			localVue,
 			store,
@@ -216,10 +225,10 @@ describe('MessagesGroup.vue', () => {
 			},
 		})
 
-		const avatarEl = wrapper.findComponent({ name: 'AuthorAvatar' })
-		expect(avatarEl.attributes('authortype')).toBe(ATTENDEE.ACTOR_TYPE.GUESTS)
-		expect(avatarEl.attributes('authorid')).toBe('actor-1')
-		expect(avatarEl.attributes('displayname')).toBe('guest-one-display-name')
+		const avatarEl = wrapper.findComponent({ name: 'AvatarWrapper' })
+		expect(avatarEl.attributes('source')).toBe(ATTENDEE.ACTOR_TYPE.GUESTS)
+		expect(avatarEl.attributes('id')).toBe('actor-1')
+		expect(avatarEl.attributes('name')).toBe('guest-one-display-name')
 
 		const authorEl = wrapper.find('.messages__author')
 		expect(authorEl.text()).toBe('guest-one-display-name')
@@ -232,8 +241,6 @@ describe('MessagesGroup.vue', () => {
 		message = messagesEl.at(1)
 		expect(message.attributes('id')).toBe('110')
 		expect(message.attributes('actorid')).toBe('actor-1')
-
-		expect(getGuestNameMock).toHaveBeenCalledWith(TOKEN, 'actor-1')
 	})
 
 	test('renders deleted guest display name', () => {
@@ -273,10 +280,10 @@ describe('MessagesGroup.vue', () => {
 			},
 		})
 
-		const avatarEl = wrapper.findComponent({ name: 'AuthorAvatar' })
-		expect(avatarEl.attributes('authortype')).toBe(ATTENDEE.ACTOR_TYPE.USERS)
-		expect(avatarEl.attributes('authorid')).toBe('actor-1')
-		expect(avatarEl.attributes('displayname')).toBe('Deleted user')
+		const avatarEl = wrapper.findComponent({ name: 'AvatarWrapper' })
+		expect(avatarEl.attributes('source')).toBe(ATTENDEE.ACTOR_TYPE.USERS)
+		expect(avatarEl.attributes('id')).toBe('actor-1')
+		expect(avatarEl.attributes('name')).toBe('Deleted user')
 
 		const authorEl = wrapper.find('.messages__author')
 		expect(authorEl.text()).toBe('Deleted user')

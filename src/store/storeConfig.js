@@ -26,7 +26,6 @@ import breakoutRoomsStore from './breakoutRoomsStore.js'
 import callViewStore from './callViewStore.js'
 import conversationsStore from './conversationsStore.js'
 import fileUploadStore from './fileUploadStore.js'
-import guestNameStore from './guestNameStore.js'
 import integrationsStore from './integrationsStore.js'
 import messagesStore from './messagesStore.js'
 import newGroupConversationStore from './newGroupConversationStore.js'
@@ -34,7 +33,6 @@ import participantsStore from './participantsStore.js'
 import pollStore from './pollStore.js'
 import quoteReplyStore from './quoteReplyStore.js'
 import reactionsStore from './reactionsStore.js'
-import sharedItemStore from './sharedItemsStore.js'
 import sidebarStore from './sidebarStore.js'
 import soundsStore from './soundsStore.js'
 import talkHashStore from './talkHashStore.js'
@@ -49,7 +47,6 @@ export default {
 		callViewStore,
 		conversationsStore,
 		fileUploadStore,
-		guestNameStore,
 		messagesStore,
 		newGroupConversationStore,
 		participantsStore,
@@ -62,7 +59,6 @@ export default {
 		windowVisibilityStore,
 		integrationsStore,
 		reactionsStore,
-		sharedItemStore,
 		pollStore,
 		breakoutRoomsStore,
 	},

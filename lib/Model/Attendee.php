@@ -60,6 +60,10 @@ use OCP\AppFramework\Db\Entity;
  * @method null|string getAccessToken()
  * @method void setRemoteId(string $remoteId)
  * @method string getRemoteId()
+ * @method void setPhoneNumber(?string $phoneNumber)
+ * @method null|string getPhoneNumber()
+ * @method void setCallId(?string $callId)
+ * @method null|string getCallId()
  */
 class Attendee extends Entity {
 	public const ACTOR_USERS = 'users';
@@ -70,7 +74,12 @@ class Attendee extends Entity {
 	public const ACTOR_BRIDGED = 'bridged';
 	public const ACTOR_BOTS = 'bots';
 	public const ACTOR_FEDERATED_USERS = 'federated_users';
+	public const ACTOR_PHONES = 'phones';
+
+	// Special actor IDs
 	public const ACTOR_BOT_PREFIX = 'bot-';
+	public const ACTOR_ID_CLI = 'cli';
+	public const ACTOR_ID_CHANGELOG = 'changelog';
 
 	public const PERMISSIONS_DEFAULT = 0;
 	public const PERMISSIONS_CUSTOM = 1;
@@ -147,6 +156,12 @@ class Attendee extends Entity {
 	/** @var string */
 	protected $remoteId;
 
+	/** @var null|string */
+	protected $phoneNumber;
+
+	/** @var null|string */
+	protected $callId;
+
 	public function __construct() {
 		$this->addType('roomId', 'int');
 		$this->addType('actorType', 'string');
@@ -165,6 +180,8 @@ class Attendee extends Entity {
 		$this->addType('permissions', 'int');
 		$this->addType('accessToken', 'string');
 		$this->addType('remote_id', 'string');
+		$this->addType('phone_number', 'string');
+		$this->addType('call_id', 'string');
 	}
 
 	public function getDisplayName(): string {
@@ -194,6 +211,8 @@ class Attendee extends Entity {
 			'permissions' => $this->getPermissions(),
 			'access_token' => $this->getAccessToken(),
 			'remote_id' => $this->getRemoteId(),
+			'phone_number' => $this->getPhoneNumber(),
+			'call_id' => $this->getCallId(),
 		];
 	}
 }

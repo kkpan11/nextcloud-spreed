@@ -93,6 +93,8 @@ OC.L10N.register(
     "Private conversation" : "Conversación privada",
     "Deleted user (%s)" : "Usuario eliminado (%s)",
     "Dismiss notification" : "Descartar notificación",
+    "Accept" : "Aceptar",
+    "Decline" : "Rechazar",
     "{user} sent you a private message" : "{user} te envió un mensaje privado",
     "{user} mentioned you in a private conversation" : "{user} te mencionó en una conversación privada",
     "{user} invited you to a private conversation" : " {user} te invitó a una conversación privada",
@@ -181,9 +183,9 @@ OC.L10N.register(
     "Upload" : "Cargar",
     "Files" : "Archivos",
     "Invalid path selected" : "Ruta seleccionada no válida.",
-    "Dismiss" : "Descartar",
     "Reply" : "Responder",
     "Translate" : "Traducir",
+    "Dismiss" : "Descartar",
     "Contact" : "Contacto",
     "Today" : "Hoy",
     "Yesterday" : "Ayer",
@@ -194,7 +196,6 @@ OC.L10N.register(
     "Blank" : "Vacío",
     "Settings" : "Configuraciones ",
     "Create poll" : "Crear encuesta",
-    "Send" : "Enviar",
     "moderator" : "moderador",
     "guest" : "invitado",
     "Demote from moderator" : "Degradar de moderador",
@@ -246,6 +247,7 @@ OC.L10N.register(
     "Welcome to Nextcloud Talk!\nIn this conversation you will be informed about new features available in Nextcloud Talk." : "Bienvenido a Nextcloud Talk!\nEn esta conversación se te informará sobre nuevas características disponibles en Nextcloud Talk.",
     "More actions" : "Más acciones",
     "Conversation name" : "Nombre de la conversación",
-    "Rename conversation" : "Renombrar conversación"
+    "Rename conversation" : "Renombrar conversación",
+    "Send" : "Enviar"
 },
 "nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;");

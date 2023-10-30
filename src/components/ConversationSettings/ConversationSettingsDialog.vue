@@ -20,82 +20,85 @@
 -->
 
 <template>
-	<NcAppSettingsDialog role="dialog"
-		:aria-label="t('spreed', 'Conversation settings')"
-		:title="t('spreed', 'Conversation settings')"
+	<NcAppSettingsDialog :aria-label="t('spreed', 'Conversation settings')"
+		:name="t('spreed', 'Conversation settings')"
 		:open.sync="showSettings"
 		:show-navigation="true"
 		:container="container">
 		<!-- description -->
 		<NcAppSettingsSection v-if="showDescription"
 			id="basic-info"
-			:title="t('spreed', 'Basic Info')">
+			:name="t('spreed', 'Basic Info')">
 			<BasicInfo :conversation="conversation"
 				:can-full-moderate="canFullModerate" />
 		</NcAppSettingsSection>
 
 		<template v-if="!isBreakoutRoom">
 			<!-- Notifications settings and devices preview screen -->
-			<NcAppSettingsSection id="notifications"
-				:title="t('spreed', 'Personal')">
-				<NcCheckboxRadioSwitch :checked.sync="showMediaSettings"
-					type="switch">
+			<NcAppSettingsSection v-if="!isNoteToSelf"
+				id="notifications"
+				:name="t('spreed', 'Personal')">
+				<NcCheckboxRadioSwitch type="switch"
+					:disabled="recordingConsentRequired"
+					:checked="showMediaSettings"
+					@update:checked="setShowMediaSettings">
 					{{ t('spreed', 'Always show the device preview screen before joining a call in this conversation.') }}
 				</NcCheckboxRadioSwitch>
-
+				<p v-if="recordingConsentRequired">
+					{{ t('spreed', 'The consent to be recorded will be required for each participant before joining every call.') }}
+				</p>
 				<NotificationsSettings :conversation="conversation" />
 			</NcAppSettingsSection>
 
 			<NcAppSettingsSection id="conversation-settings"
-				:title="t('spreed', 'Moderation')">
-				<ListableSettings v-if="canFullModerate"
-					:token="token" />
-				<LinkShareSettings v-if="canFullModerate"
-					ref="linkShareSettings" />
-				<ExpirationSettings :token="token" />
+				:name="canFullModerate ? t('spreed', 'Moderation') : t('spreed', 'Setup overview')">
+				<ListableSettings v-if="!isNoteToSelf && !isGuest" :token="token" :can-full-moderate="canFullModerate" />
+				<LinkShareSettings v-if="!isNoteToSelf" :token="token" :can-full-moderate="canFullModerate" />
+				<RecordingConsentSettings v-if="!isNoteToSelf && recordingConsentAvailable" :token="token" :can-full-moderate="canFullModerate" />
+				<ExpirationSettings :token="token" :can-full-moderate="canFullModerate" />
 			</NcAppSettingsSection>
 
 			<!-- Meeting: lobby and sip -->
-			<NcAppSettingsSection v-if="canFullModerate"
+			<NcAppSettingsSection v-if="canFullModerate && !isNoteToSelf"
 				id="meeting"
-				:title="t('spreed', 'Meeting')">
+				:name="t('spreed', 'Meeting')">
 				<LobbySettings :token="token" />
 				<SipSettings v-if="canUserEnableSIP" />
 			</NcAppSettingsSection>
 
 			<!-- Conversation permissions -->
-			<NcAppSettingsSection v-if="canFullModerate"
+			<NcAppSettingsSection v-if="canFullModerate && !isNoteToSelf"
 				id="permissions"
-				:title="t('spreed', 'Permissions')">
+				:name="t('spreed', 'Permissions')">
 				<ConversationPermissionsSettings :token="token" />
 			</NcAppSettingsSection>
 
 			<!-- Breakout rooms -->
 			<NcAppSettingsSection v-if="canConfigureBreakoutRooms"
 				id="breakout-rooms"
-				:title="t('spreed', 'Breakout Rooms')">
+				:name="t('spreed', 'Breakout Rooms')">
 				<BreakoutRoomsSettings :token="token" />
 			</NcAppSettingsSection>
 
 			<!-- Matterbridge settings -->
 			<NcAppSettingsSection v-if="canFullModerate && matterbridgeEnabled"
 				id="matterbridge"
-				:title="t('spreed', 'Matterbridge')">
+				:name="t('spreed', 'Matterbridge')">
 				<MatterbridgeSettings />
 			</NcAppSettingsSection>
 
 			<!-- Bots settings -->
 			<NcAppSettingsSection v-if="selfIsOwnerOrModerator && hasBotV1API"
 				id="bots"
-				:title="t('spreed', 'Bots')">
+				:name="t('spreed', 'Bots')">
 				<BotsSettings :token="token" />
 			</NcAppSettingsSection>
 
 			<!-- Destructive actions -->
 			<NcAppSettingsSection v-if="canLeaveConversation || canDeleteConversation"
 				id="dangerzone"
-				:title="t('spreed', 'Danger zone')">
-				<LockingSettings :token="token" />
+				:name="t('spreed', 'Danger zone')">
+				<LockingSettings v-if="canFullModerate && !isNoteToSelf" :token="token" />
 				<DangerZone :conversation="conversation"
 					:can-leave-conversation="canLeaveConversation"
 					:can-delete-conversation="canDeleteConversation" />
@@ -125,10 +128,15 @@ import LobbySettings from './LobbySettings.vue'
 import LockingSettings from './LockingSettings.vue'
 import MatterbridgeSettings from './Matterbridge/MatterbridgeSettings.vue'
 import NotificationsSettings from './NotificationsSettings.vue'
+import RecordingConsentSettings from './RecordingConsentSettings.vue'
 import SipSettings from './SipSettings.vue'
 
-import { PARTICIPANT, CONVERSATION } from '../../constants.js'
-import BrowserStorage from '../../services/BrowserStorage.js'
+import { CALL, PARTICIPANT, CONVERSATION } from '../../constants.js'
+import { useSettingsStore } from '../../stores/settings.js'
+
+const recordingEnabled = getCapabilities()?.spreed?.config?.call?.recording || false
+const recordingConsentCapability = getCapabilities()?.spreed?.features?.includes('recording-consent')
+const recordingConsent = getCapabilities()?.spreed?.config?.call?.['recording-consent'] !== CALL.RECORDING_CONSENT.OFF
 
 export default {
 	name: 'ConversationSettingsDialog',
@@ -149,14 +157,19 @@ export default {
 		NcAppSettingsSection,
 		NcCheckboxRadioSwitch,
 		NotificationsSettings,
+		RecordingConsentSettings,
 		SipSettings,
+	},
+
+	setup() {
+		const settingsStore = useSettingsStore()
+		return { settingsStore }
 	},
 
 	data() {
 		return {
 			showSettings: false,
 			matterbridgeEnabled: loadState('spreed', 'enable_matterbridge'),
-			showMediaSettings: false,
 		}
 	},
 
@@ -169,9 +182,21 @@ export default {
 			return this.conversation.canEnableSIP
 		},
 
+		isNoteToSelf() {
+			return this.conversation.type === CONVERSATION.TYPE.NOTE_TO_SELF
+		},
+
+		isGuest() {
+			return this.$store.getters.getActorType() === 'guests'
+		},
+
 		token() {
 			return this.$store.getters.getConversationSettingsToken()
 				|| this.$store.getters.getToken()
+		},
+
+		showMediaSettings() {
+			return this.settingsStore.getShowMediaSettings(this.token)
 		},
 
 		conversation() {
@@ -210,7 +235,7 @@ export default {
 		},
 
 		isBreakoutRoom() {
-			return this.conversation.objectType === 'room'
+			return this.conversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM
 		},
 
 		hasBotV1API() {
@@ -223,24 +248,25 @@ export default {
 				&& breakoutRoomsEnabled
 				&& this.conversation.type === CONVERSATION.TYPE.GROUP
 		},
-	},
 
-	watch: {
-		showMediaSettings(newValue) {
-			const browserValue = newValue ? 'true' : 'false'
-			BrowserStorage.setItem('showMediaSettings' + this.token, browserValue)
+		recordingConsentAvailable() {
+			return recordingEnabled && recordingConsentCapability && recordingConsent
 		},
+
+		recordingConsentRequired() {
+			return this.conversation.recordingConsent === CALL.RECORDING_CONSENT.REQUIRED
+		}
 	},
 
 	mounted() {
 		subscribe('show-conversation-settings', this.handleShowSettings)
 		subscribe('hide-conversation-settings', this.handleHideSettings)
 
-		/**
-		 * Get the MediaSettings value from the browser storage.
-		 */
-		this.showMediaSettings = BrowserStorage.getItem('showMediaSettings' + this.token) === null
-			|| BrowserStorage.getItem('showMediaSettings' + this.token) === 'true'
+	},
+
+	beforeDestroy() {
+		unsubscribe('show-conversation-settings', this.handleShowSettings)
+		unsubscribe('hide-conversation-settings', this.handleHideSettings)
 	},
 
 	methods: {
@@ -254,10 +280,9 @@ export default {
 			this.$store.dispatch('updateConversationSettingsToken', '')
 		},
 
-		beforeDestroy() {
-			unsubscribe('show-conversation-settings', this.handleShowSettings)
-			unsubscribe('hide-conversation-settings', this.handleHideSettings)
-		},
+		setShowMediaSettings(newValue) {
+			this.settingsStore.setShowMediaSettings(this.token, newValue)
+		}
 	},
 }
 </script>

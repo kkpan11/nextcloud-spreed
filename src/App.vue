@@ -30,7 +30,7 @@
 		</NcAppContent>
 		<RightSidebar :is-in-call="isInCall" />
 		<PreventUnload :when="warnLeaving || isSendingMessages" />
-		<MediaSettings :initialize-on-mounted="false" />
+		<MediaSettings :initialize-on-mounted="false" :recording-consent-given.sync="recordingConsentGiven" />
 		<SettingsDialog />
 		<ConversationSettingsDialog />
 	</NcContent>
@@ -54,6 +54,7 @@ import MediaSettings from './components/MediaSettings/MediaSettings.vue'
 import RightSidebar from './components/RightSidebar/RightSidebar.vue'
 import SettingsDialog from './components/SettingsDialog/SettingsDialog.vue'
 
+import { useActiveSession } from './composables/useActiveSession.js'
 import { useIsInCall } from './composables/useIsInCall.js'
 import { CONVERSATION, PARTICIPANT } from './constants.js'
 import browserCheck from './mixins/browserCheck.js'
@@ -92,7 +93,9 @@ export default {
 
 	setup() {
 		const isInCall = useIsInCall()
-		return { isInCall }
+		const supportSessionState = useActiveSession()
+
+		return { isInCall, supportSessionState }
 	},
 
 	data() {
@@ -101,6 +104,7 @@ export default {
 			defaultPageTitle: false,
 			loading: false,
 			isRefreshingCurrentConversation: false,
+			recordingConsentGiven: false,
 		}
 	},
 
@@ -217,12 +221,17 @@ export default {
 			this.setPageTitle(this.getConversationName(this.token), this.atLeastOneLastMessageIdChanged)
 		},
 
-		token() {
-			// Collapse the sidebar if it's a 1to1 conversation
+		token(newValue, oldValue) {
+			// Collapse the sidebar if it's a one to one conversation
 			if (this.isOneToOne || BrowserStorage.getItem('sidebarOpen') === 'false' || this.isMobile) {
 				this.$store.dispatch('hideSidebar')
 			} else if (BrowserStorage.getItem('sidebarOpen') === 'true') {
 				this.$store.dispatch('showSidebar')
+			}
+
+			// Reset recording consent if switch doesn't happen within breakout rooms or main room
+			if (!this.isBreakoutRoomsNavigation(oldValue, newValue)) {
+				this.recordingConsentGiven = false
 			}
 		},
 	},
@@ -345,6 +354,8 @@ export default {
 						token: params.token,
 						participantIdentifier: this.$store.getters.getParticipantIdentifier(),
 						flags,
+						silent: true,
+						recordingConsent: this.recordingConsentGiven,
 					})
 
 					this.$store.dispatch('setForceCallView', false)
@@ -450,6 +461,10 @@ export default {
 			} else if (to.name === 'notfound') {
 				this.setPageTitle('')
 			}
+
+			if (to.hash === '#direct-call') {
+				emit('talk:media-settings:show')
+			}
 		})
 
 		if (getCurrentUser()) {
@@ -478,6 +493,10 @@ export default {
 			})
 		}
 
+		if (this.$route.hash === '#direct-call') {
+			emit('talk:media-settings:show')
+		}
+
 		subscribe('notifications:action:execute', this.interceptNotificationActions)
 		subscribe('notifications:notification:received', this.interceptNotificationReceived)
 	},
@@ -504,12 +523,12 @@ export default {
 				return
 			}
 
-			const [token, messageId] = load.split('#message_')
+			const [token, hash] = load.split('#')
 			this.$router.push({
 				name: 'conversation',
+				hash: hash ? `#${hash}` : '',
 				params: {
 					token,
-					hash: messageId ? `#message_${messageId}` : '',
 				},
 			})
 
@@ -665,6 +684,38 @@ export default {
 			})
 			document.querySelector('.conversations-search input').focus()
 		},
+
+		/**
+		 * Check if conversation was switched within breakout rooms and parent room.
+		 *
+		 * @param {string} oldToken The old conversation's token
+		 * @param {string} newToken The new conversation's token
+		 * @return {boolean}
+		 */
+		isBreakoutRoomsNavigation(oldToken, newToken) {
+			const oldConversation = this.$store.getters.conversation(oldToken)
+			const newConversation = this.$store.getters.conversation(newToken)
+
+			// One of rooms is undefined
+			if (!oldConversation || !newConversation) {
+				return false
+			}
+
+			// Parent to breakout
+			if (oldConversation.breakoutRoomMode !== CONVERSATION.BREAKOUT_ROOM_MODE.NOT_CONFIGURED
+				&& newConversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM) {
+				return true
+			}
+
+			// Breakout to parent
+			if (oldConversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM
+				&& newConversation.breakoutRoomMode !== CONVERSATION.BREAKOUT_ROOM_MODE.NOT_CONFIGURED) {
+				return true
+			}
+
+			// Breakout to breakout
+			return oldConversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM && newConversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM
+		}
 	},
 }
 </script>
@@ -676,6 +727,11 @@ export default {
 	z-index: 10001 !important;
 }
 
+/* FIXME: remove after https://github.com/nextcloud-libraries/nextcloud-vue/pull/4350 regression is solved */
+/* Force modal close button to be above modal content */
+.modal-container__close {
+	z-index: 1;
+}
 </style>
 
 <style lang="scss" scoped>

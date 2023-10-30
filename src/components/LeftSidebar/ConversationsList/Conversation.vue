@@ -21,10 +21,11 @@
 
 <template>
 	<NcListItem ref="listItem"
-		:title="item.displayName"
+		:key="item.token"
+		:name="item.displayName"
 		class="conversation-item"
 		:class="{'unread-mention-conversation': item.unreadMention}"
-		:anchor-id="`conversation_${item.token}`"
+		:data-nav-id="`conversation_${item.token}`"
 		:actions-aria-label="t('spreed', 'Conversation actions')"
 		:to="to"
 		:bold="!!item.unreadMessages"
@@ -32,12 +33,9 @@
 		:counter-type="counterType"
 		@click="onClick">
 		<template #icon>
-			<ConversationIcon :item="item"
-				:hide-favorite="false"
-				:hide-call="false"
-				:disable-menu="true" />
+			<ConversationIcon :item="item" :hide-favorite="false" :hide-call="false" />
 		</template>
-		<template #subtitle>
+		<template #subname>
 			<strong v-if="item.unreadMessages"
 				class="subtitle">
 				{{ conversationInformation }}
@@ -336,7 +334,7 @@ export default {
 			immediate: true,
 			handler(value) {
 				this.$nextTick().then(() => {
-					const titleSpan = this.$refs.listItem?.$el?.querySelector('.line-one__title')
+					const titleSpan = this.$refs.listItem?.$el?.querySelector('.line-one__name')
 
 					if (titleSpan && titleSpan.offsetWidth < titleSpan.scrollWidth) {
 						titleSpan.setAttribute('title', value)
@@ -451,10 +449,6 @@ export default {
 
 .subtitle {
 	font-weight: bold;
-}
-
-:deep(.action-text__title) {
-	margin-left: 12px;
 }
 
 .critical {

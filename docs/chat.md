@@ -191,9 +191,10 @@ See [OCP\RichObjectStrings\Definitions](https://github.com/nextcloud/server/blob
 
     - `talkMetaData` array:
 
-| field         | type   | Description                                                                                            |
-|---------------|--------|--------------------------------------------------------------------------------------------------------|
-| `messageType` | string | A message type to show the message in different styles. Currently known: `voice-message` and `comment` |
+| field         | type   | Description                                                                                                           |
+|---------------|--------|-----------------------------------------------------------------------------------------------------------------------|
+| `messageType` | string | A message type to show the message in different styles. Currently known: `voice-message` and `comment`                |
+| `caption`     | string | A caption message that should be shown together with the shared file (only available with `media-caption` capability) |
 
 * Response: [See official OCS Share API docs](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-share-api.html?highlight=sharing#create-a-new-share)
 
@@ -455,7 +456,7 @@ See [OCP\RichObjectStrings\Definitions](https://github.com/nextcloud/server/blob
 * `read_only` - {actor} locked the conversation
 * `listable_none` - {actor} limited the conversation to the current participants
 * `listable_users` - {actor} opened the conversation accessible to registered users
-* `listable_all` - {actor} opened the conversation accessible to registered and guest app users
+* `listable_all` - {actor} opened the conversation accessible to registered users and users created with the Guests app
 * `lobby_timer_reached` - The conversation is now open to everyone
 * `lobby_none` - {actor} opened the conversation to everyone
 * `lobby_non_moderators` - {actor} restricted the conversation to moderators
@@ -498,3 +499,5 @@ See [OCP\RichObjectStrings\Definitions](https://github.com/nextcloud/server/blob
 * `audio_recording_stopped` - {actor} stopped an audio recording
 * `avatar_set` - {actor} set the conversation avatar
 * `avatar_removed` - {actor} removed the conversation avatar
+* `federated_user_added` - {actor} invited {federated_user} / {federated_user} accepted the invitation
+* `federated_user_removed` - {actor} removed {federated_user} / {federated_user} declined the invitation

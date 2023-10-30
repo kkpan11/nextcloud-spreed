@@ -20,51 +20,91 @@
 -->
 
 <template>
-	<div>
-		<SearchBox v-if="canSearch"
-			:value.sync="searchText"
-			:is-focused.sync="isFocused"
-			:placeholder-text="searchBoxPlaceholder"
-			@input="handleInput"
-			@abort-search="abortSearch" />
-		<NcAppNavigationCaption v-if="isSearching && canAdd"
-			:title="t('spreed', 'Participants')" />
-		<CurrentParticipants :search-text="searchText"
-			:participants-initialised="participantsInitialised" />
-		<ParticipantsSearchResults v-if="canAdd && isSearching"
-			:search-results="searchResults"
-			:contacts-loading="contactsLoading"
-			:no-results="noResults"
-			:search-text="searchText"
-			@click="addParticipants" />
+	<div class="wrapper">
+		<div class="search-form">
+			<SearchBox v-if="canSearch"
+				class="search-form__input"
+				:value.sync="searchText"
+				:is-focused.sync="isFocused"
+				:placeholder-text="searchBoxPlaceholder"
+				@input="handleInput"
+				@keydown.enter="addParticipants(participantPhoneItem)"
+				@abort-search="abortSearch" />
+			<DialpadPanel v-if="canAddPhones"
+				:value.sync="searchText"
+				@submit="addParticipants(participantPhoneItem)" />
+		</div>
+
+		<SelectPhoneNumber v-if="canAddPhones"
+			:name="t('spreed', 'Add a phone number')"
+			:value="searchText"
+			:participant-phone-item.sync="participantPhoneItem"
+			@select="addParticipants" />
+
+		<ParticipantsListVirtual v-if="!isSearching"
+			class="h-100"
+			:participants="participants"
+			:loading="!participantsInitialised" />
+
+		<div v-else class="scroller">
+			<NcAppNavigationCaption v-if="canAdd" :name="t('spreed', 'Participants')" />
+
+			<ParticipantsList v-if="filteredParticipants.length"
+				:items="filteredParticipants"
+				:loading="!participantsInitialised" />
+			<Hint v-else :hint="t('spreed', 'No search results')" />
+
+			<ParticipantsSearchResults v-if="canAdd"
+				:search-results="searchResults"
+				:contacts-loading="contactsLoading"
+				:no-results="noResults"
+				:search-text="searchText"
+				@click="addParticipants" />
+		</div>
 	</div>
 </template>
 
 <script>
 import debounce from 'debounce'
 
+import { getCapabilities } from '@nextcloud/capabilities'
 import { showError } from '@nextcloud/dialogs'
+import { subscribe, unsubscribe } from '@nextcloud/event-bus'
 import { loadState } from '@nextcloud/initial-state'
 
 import NcAppNavigationCaption from '@nextcloud/vue/dist/Components/NcAppNavigationCaption.js'
 
+import DialpadPanel from '../../DialpadPanel.vue'
+import Hint from '../../Hint.vue'
 import SearchBox from '../../LeftSidebar/SearchBox/SearchBox.vue'
-import CurrentParticipants from './CurrentParticipants/CurrentParticipants.vue'
+import SelectPhoneNumber from '../../SelectPhoneNumber.vue'
+import ParticipantsList from './ParticipantsList/ParticipantsList.vue'
+import ParticipantsListVirtual from './ParticipantsList/ParticipantsListVirtual.vue'
 import ParticipantsSearchResults from './ParticipantsSearchResults/ParticipantsSearchResults.vue'
 
+import { useSortParticipants } from '../../../composables/useSortParticipants.js'
 import getParticipants from '../../../mixins/getParticipants.js'
 import { searchPossibleConversations } from '../../../services/conversationsService.js'
 import { EventBus } from '../../../services/EventBus.js'
 import { addParticipant } from '../../../services/participantsService.js'
 import CancelableRequest from '../../../utils/cancelableRequest.js'
 
+const canModerateSipDialOut = getCapabilities()?.spreed?.features?.includes('sip-support-dialout')
+		&& getCapabilities()?.spreed?.config.call['sip-enabled']
+		&& getCapabilities()?.spreed?.config.call['sip-dialout-enabled']
+		&& getCapabilities()?.spreed?.config.call['can-enable-sip']
+
 export default {
 	name: 'ParticipantsTab',
 	components: {
+		DialpadPanel,
+		Hint,
 		NcAppNavigationCaption,
-		CurrentParticipants,
-		SearchBox,
+		ParticipantsList,
+		ParticipantsListVirtual,
 		ParticipantsSearchResults,
+		SearchBox,
+		SelectPhoneNumber,
 	},
 
 	mixins: [getParticipants],
@@ -80,18 +120,40 @@ export default {
 		},
 	},
 
+	setup() {
+		const { sortParticipants } = useSortParticipants()
+
+		return {
+			sortParticipants,
+		}
+	},
+
 	data() {
 		return {
 			searchText: '',
 			isFocused: false,
 			searchResults: [],
 			contactsLoading: false,
+			participantPhoneItem: {},
 			isCirclesEnabled: loadState('spreed', 'circles_enabled'),
 			cancelSearchPossibleConversations: () => {},
 		}
 	},
 
 	computed: {
+		participants() {
+			return this.$store.getters.participantsList(this.token).slice().sort(this.sortParticipants)
+		},
+
+		filteredParticipants() {
+			const isMatch = (string) => string.toLowerCase().includes(this.searchText.toLowerCase())
+
+			return this.participants.filter(participant => {
+				return isMatch(participant.displayName)
+					|| (participant.actorType !== 'guests' && isMatch(participant.actorId))
+			})
+		},
+
 		searchBoxPlaceholder() {
 			return this.canAdd
 				? t('spreed', 'Search or add participants')
@@ -109,6 +171,9 @@ export default {
 		conversation() {
 			return this.$store.getters.conversation(this.token) || this.$store.getters.dummyConversation
 		},
+		canAddPhones() {
+			return canModerateSipDialOut && this.conversation.canEnableSIP
+		},
 		isSearching() {
 			return this.searchText !== ''
 		},
@@ -117,8 +182,15 @@ export default {
 		},
 	},
 
+	watch: {
+		searchText(value) {
+			this.isFocused = !!value
+		}
+	},
+
 	beforeMount() {
 		EventBus.$on('route-change', this.abortSearch)
+		subscribe('user_status:status.updated', this.updateUserStatus)
 
 		// Initialises the get participants mixin
 		this.initialiseGetParticipantsMixin()
@@ -126,6 +198,7 @@ export default {
 
 	beforeDestroy() {
 		EventBus.$off('route-change', this.abortSearch)
+		unsubscribe('user_status:status.updated', this.updateUserStatus)
 
 		this.cancelSearchPossibleConversations()
 		this.cancelSearchPossibleConversations = null
@@ -197,11 +270,55 @@ export default {
 				this.cancelSearchPossibleConversations()
 			}
 		},
+
+		updateUserStatus(state) {
+			if (!this.token) {
+				return
+			}
+
+			if (this.participants.find(participant => participant.actorId === state.userId)) {
+				this.$store.dispatch('updateUser', {
+					token: this.token,
+					participantIdentifier: {
+						actorType: 'users',
+						actorId: state.userId,
+					},
+					updatedData: {
+						status: state.status,
+						statusIcon: state.icon,
+						statusMessage: state.message,
+					},
+				})
+			}
+		},
 	},
 }
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+.wrapper {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+}
+
+.h-100 {
+	height: 100%;
+}
+
+.search-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  .search-form__input {
+    margin: 0;
+  }
+}
+
+.scroller {
+	overflow-y: auto;
+}
 
 /** TODO: fix these in the nextcloud-vue library **/
 

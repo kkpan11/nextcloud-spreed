@@ -23,9 +23,10 @@
 	<div class="top-bar" :class="{ 'in-call': isInCall }">
 		<ConversationIcon :key="conversation.token"
 			class="conversation-icon"
-			:offline="isPeerOffline"
+			:offline="isPeerInactive"
 			:item="conversation"
-			:disable-menu="isAvatarMenuDisabled"
+			:disable-menu="disableMenu"
+			show-user-online-status
 			:hide-favorite="false"
 			:hide-call="false" />
 		<!-- conversation header -->
@@ -33,7 +34,7 @@
 			class="conversation-header"
 			@click="openConversationSettings">
 			<div class="conversation-header__text"
-				:class="{'conversation-header__text--offline': isPeerOffline}">
+				:class="{'conversation-header__text--offline': isPeerInactive}">
 				<p class="title">
 					{{ conversation.displayName }}
 				</p>
@@ -127,7 +128,7 @@
 						fill-color="#ffffff" />
 					<NcCounterBubble v-if="unreadMessagesCounter > 0"
 						class="chat-button__unread-messages-counter"
-						:highlighted="hasUnreadMentions">
+						:type="hasUnreadMentions ? 'highlighted' : 'outlined'">
 						{{ unreadMessagesCounter }}
 					</NcCounterBubble>
 				</template>
@@ -165,8 +166,8 @@ import TopBarMenu from './TopBarMenu.vue'
 
 import { CONVERSATION } from '../../constants.js'
 import getParticipants from '../../mixins/getParticipants.js'
-import userStatus from '../../mixins/userStatus.js'
 import BrowserStorage from '../../services/BrowserStorage.js'
+import { getStatusMessage } from '../../utils/userStatus.js'
 import { localCallParticipantModel, localMediaModel } from '../../utils/webrtc/index.js'
 
 export default {
@@ -195,7 +196,6 @@ export default {
 
 	mixins: [
 		richEditor,
-		userStatus,
 		getParticipants,
 	],
 
@@ -249,7 +249,7 @@ export default {
 		},
 
 		statusMessage() {
-			return this.getStatusMessage(this.conversation)
+			return getStatusMessage(this.conversation)
 		},
 
 		unreadMessagesCounter() {
@@ -273,7 +273,7 @@ export default {
 		/**
 		 * Online status of the peer in one to one conversation.
 		 */
-		isPeerOffline() {
+		isPeerInactive() {
 			// Only compute this in one-to-one conversations
 			if (!this.isOneToOneConversation) {
 				return undefined
@@ -301,7 +301,7 @@ export default {
 			return n('spreed', '%n participant in call', '%n participants in call', this.$store.getters.participantsInCall(this.token))
 		},
 
-		isAvatarMenuDisabled() {
+		disableMenu() {
 			// NcAvatarMenu doesn't work on Desktop
 			// See: https://github.com/nextcloud/talk-desktop/issues/34
 			return IS_DESKTOP
@@ -345,17 +345,17 @@ export default {
 			}
 		},
 
-		isModeratorOrUser(newValue) {
-			if (newValue) {
-				// fetch participants immediately when becomes available
-				this.cancelableGetParticipants()
-			}
+		isOneToOneConversation: {
+			immediate: true,
+			// Group conversations have mixin in RightSidebar, so should work only for one-to-one
+			handler(newValue) {
+				if (newValue) {
+					this.initialiseGetParticipantsMixin()
+				} else {
+					this.stopGetParticipantsMixin()
+				}
+			},
 		},
-	},
-
-	beforeMount() {
-		// Initialises the get participants mixin for participants counter
-		this.initialiseGetParticipantsMixin()
 	},
 
 	mounted() {
@@ -373,8 +373,6 @@ export default {
 		document.removeEventListener('MSFullscreenChange', this.fullScreenChanged, false)
 		document.removeEventListener('webkitfullscreenchange', this.fullScreenChanged, false)
 		document.body.classList.remove('has-topbar')
-
-		this.stopGetParticipantsMixin()
 	},
 
 	methods: {
@@ -404,8 +402,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/variables';
-
 .top-bar {
 	right: 12px; /* needed so we can still use the scrollbar */
 	display: flex;
@@ -416,7 +412,7 @@ export default {
 	border-bottom: 1px solid var(--color-border);
 
 	.talk-sidebar-callview & {
-		margin-right: $clickable-area;
+		margin-right: var(--default-clickable-area);
 	}
 
 	&.in-call {
@@ -489,7 +485,7 @@ export default {
 		justify-content: center;
 		width: 100%;
 		overflow: hidden;
-		height: $clickable-area;
+		height: var(--default-clickable-area);
 		&--offline {
 			color: var(--color-text-maxcontrast);
 		}

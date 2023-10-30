@@ -83,6 +83,8 @@ function Base(settings) {
 	this.currentRoomToken = null
 	this.currentCallToken = null
 	this.currentCallFlags = null
+	this.currentCallSilent = null
+	this.currentCallRecordingConsent = null
 	this.nextcloudSessionId = null
 	this.handlers = {}
 	this.features = {}
@@ -169,11 +171,17 @@ Signaling.Base.prototype.getCurrentCallFlags = function() {
 	return this.currentCallFlags
 }
 
+Signaling.Base.prototype._resetCurrentCallParameters = function() {
+	this.currentCallToken = null
+	this.currentCallFlags = null
+	this.currentCallSilent = null
+	this.currentCallRecordingConsent = null
+}
+
 Signaling.Base.prototype.disconnect = function() {
 	this.sessionId = ''
 	this._trigger('sessionId', [this.sessionId])
-	this.currentCallToken = null
-	this.currentCallFlags = null
+	this._resetCurrentCallParameters()
 }
 
 Signaling.Base.prototype.hasFeature = function(feature) {
@@ -222,8 +230,7 @@ Signaling.Base.prototype.leaveCurrentCall = function() {
 	return new Promise((resolve, reject) => {
 		if (this.currentCallToken) {
 			this.leaveCall(this.currentCallToken).then(() => { resolve() }).catch(reason => { reject(reason) })
-			this.currentCallToken = null
-			this.currentCallFlags = null
+			this._resetCurrentCallParameters()
 		} else {
 			resolve()
 		}
@@ -239,10 +246,9 @@ Signaling.Base.prototype.joinRoom = function(token, sessionId) {
 		resolve()
 		if (this.currentCallToken === token) {
 			// We were in this call before, join again.
-			this.joinCall(token, this.currentCallFlags)
+			this.joinCall(token, this.currentCallFlags, this.currentCallSilent, this.currentCallRecordingConsent)
 		} else {
-			this.currentCallToken = null
-			this.currentCallFlags = null
+			this._resetCurrentCallParameters()
 		}
 		this._joinRoomSuccess(token, sessionId)
 	})
@@ -282,17 +288,20 @@ Signaling.Base.prototype._joinCallSuccess = function(/* token */) {
 	// Override in subclasses if necessary.
 }
 
-Signaling.Base.prototype.joinCall = function(token, flags, silent) {
+Signaling.Base.prototype.joinCall = function(token, flags, silent, recordingConsent) {
 	return new Promise((resolve, reject) => {
 		this._trigger('beforeJoinCall', [token])
 
 		axios.post(generateOcsUrl('apps/spreed/api/v4/call/{token}', { token }), {
 			flags,
 			silent,
+			recordingConsent,
 		})
 			.then(function() {
 				this.currentCallToken = token
 				this.currentCallFlags = flags
+				this.currentCallSilent = silent
+				this.currentCallRecordingConsent = recordingConsent
 				this._trigger('joinCall', [token])
 				resolve()
 				this._joinCallSuccess(token)
@@ -358,8 +367,7 @@ Signaling.Base.prototype.leaveCall = function(token, keepToken, all = false) {
 				resolve()
 				// We left the current call.
 				if (!keepToken && token === this.currentCallToken) {
-					this.currentCallToken = null
-					this.currentCallFlags = null
+					this._resetCurrentCallParameters()
 				}
 			}.bind(this))
 			.catch(function() {
@@ -367,8 +375,7 @@ Signaling.Base.prototype.leaveCall = function(token, keepToken, all = false) {
 				reject(new Error())
 				// We left the current call.
 				if (!keepToken && token === this.currentCallToken) {
-					this.currentCallToken = null
-					this.currentCallFlags = null
+					this._resetCurrentCallParameters()
 				}
 			}.bind(this))
 	})
@@ -520,7 +527,7 @@ Signaling.Internal.prototype._startPullingMessages = function() {
 					localParticipant = message.data.find(participant => participant.sessionId === this.sessionId)
 					if (this._joinCallAgainOnceDisconnected && !localParticipant.inCall) {
 						this._joinCallAgainOnceDisconnected = false
-						this.joinCall(this.currentCallToken, this.currentCallFlags)
+						this.joinCall(this.currentCallToken, this.currentCallFlags, this.currentCallSilent, this.currentCallRecordingConsent)
 					}
 
 					break
@@ -796,6 +803,12 @@ Signaling.Standalone.prototype.connect = function() {
 			message.payload = data.control.data
 			message.from = data.control.sender.sessionid
 			this._trigger('message', [message])
+			break
+		case 'dialout':
+			this.processDialOutEvent(data)
+			break
+		case 'transient':
+			this.processTransientEvent(data)
 			break
 		case 'error':
 			switch (data.error.code) {
@@ -1181,7 +1194,7 @@ Signaling.Standalone.prototype._joinRoomSuccess = function(token, nextcloudSessi
 	}.bind(this))
 }
 
-Signaling.Standalone.prototype.joinCall = function(token, flags) {
+Signaling.Standalone.prototype.joinCall = function(token, flags, silent, recordingConsent) {
 	if (this.signalingRoomJoined !== token) {
 		console.debug('Not joined room yet, not joining call', token)
 
@@ -1195,6 +1208,8 @@ Signaling.Standalone.prototype.joinCall = function(token, flags) {
 			this.pendingJoinCall = {
 				token,
 				flags,
+				silent,
+				recordingConsent,
 				resolve,
 				reject,
 			}
@@ -1214,6 +1229,8 @@ Signaling.Standalone.prototype.joinCall = function(token, flags) {
 
 			this.currentCallToken = token
 			this.currentCallFlags = flags
+			this.currentCallSilent = silent
+			this.currentCallRecordingConsent = recordingConsent
 			this._trigger('joinCall', [token])
 
 			resolve()
@@ -1230,11 +1247,13 @@ Signaling.Standalone.prototype.joinResponseReceived = function(data, token) {
 		const pendingJoinCallResolve = this.pendingJoinCall.resolve
 		const pendingJoinCallReject = this.pendingJoinCall.reject
 
-		this.joinCall(this.pendingJoinCall.token, this.pendingJoinCall.flags).then(() => {
-			pendingJoinCallResolve()
-		}).catch(error => {
-			pendingJoinCallReject(error)
-		})
+		const { flags, silent, recordingConsent } = this.pendingJoinCall
+		this.joinCall(token, flags, silent, recordingConsent)
+			.then(() => {
+				pendingJoinCallResolve()
+			}).catch(error => {
+				pendingJoinCallReject(error)
+			})
 
 		this.pendingJoinCall = null
 	}
@@ -1282,6 +1301,35 @@ Signaling.Standalone.prototype.processEvent = function(data) {
 		break
 	default:
 		console.error('Unsupported event target', data)
+		break
+	}
+}
+
+Signaling.Standalone.prototype.processDialOutEvent = function(data) {
+	if (data.dialout.callid) {
+		store.dispatch('processDialOutAnswer', { callid: data.dialout.callid })
+	} else if (data.dialout.error) {
+		console.debug(data.dialout.error)
+	}
+}
+
+Signaling.Standalone.prototype.processTransientEvent = function(data) {
+	switch (data.transient.type) {
+	case 'set':
+		if (data.transient.key.startsWith('callstatus_')) {
+			store.dispatch('processTransientCallStatus', { value: data.transient.value })
+		}
+		break
+	case 'remove':
+		// ignore event
+		break
+	case 'initial':
+		if (data.transient.data) {
+			store.dispatch('addPhonesStates', { phoneStates: data.transient.data })
+		}
+		break
+	default:
+		console.error('Unsupported event type', data)
 		break
 	}
 }

@@ -27,9 +27,11 @@ use OCA\Talk\Chat\MessageParser;
 use OCA\Talk\Config;
 use OCA\Talk\Exceptions\ParticipantNotFoundException;
 use OCA\Talk\Exceptions\RoomNotFoundException;
+use OCA\Talk\Federation\FederationManager;
 use OCA\Talk\GuestManager;
 use OCA\Talk\Manager;
 use OCA\Talk\Model\Attendee;
+use OCA\Talk\Model\BotServerMapper;
 use OCA\Talk\Model\Message;
 use OCA\Talk\Notification\Notifier;
 use OCA\Talk\Participant;
@@ -50,6 +52,7 @@ use OCP\Notification\IManager as INotificationManager;
 use OCP\Notification\INotification;
 use OCP\RichObjectStrings\Definitions;
 use OCP\Share\IManager as IShareManager;
+use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
@@ -80,8 +83,6 @@ class NotifierTest extends TestCase {
 	protected $commentsManager;
 	/** @var MessageParser|MockObject */
 	protected $messageParser;
-	/** @var IURLGenerator|MockObject */
-	protected $urlGenerator;
 	/** @var IRootFolder|MockObject */
 	protected $rootFolder;
 	/** @var ITimeFactory|MockObject */
@@ -91,6 +92,10 @@ class NotifierTest extends TestCase {
 	protected ?Notifier $notifier = null;
 	/** @var AddressHandler|MockObject */
 	protected $addressHandler;
+	/** @var BotServerMapper|MockObject */
+	protected $botServerMapper;
+	/** @var FederationManager|MockObject */
+	protected $federationManager;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -108,11 +113,12 @@ class NotifierTest extends TestCase {
 		$this->notificationManager = $this->createMock(INotificationManager::class);
 		$this->commentsManager = $this->createMock(CommentsManager::class);
 		$this->messageParser = $this->createMock(MessageParser::class);
-		$this->urlGenerator = $this->createMock(IURLGenerator::class);
 		$this->rootFolder = $this->createMock(IRootFolder::class);
 		$this->timeFactory = $this->createMock(ITimeFactory::class);
 		$this->definitions = $this->createMock(Definitions::class);
 		$this->addressHandler = $this->createMock(AddressHandler::class);
+		$this->botServerMapper = $this->createMock(BotServerMapper::class);
+		$this->federationManager = $this->createMock(FederationManager::class);
 
 		$this->notifier = new Notifier(
 			$this->lFactory,
@@ -128,15 +134,16 @@ class NotifierTest extends TestCase {
 			$this->notificationManager,
 			$this->commentsManager,
 			$this->messageParser,
-			$this->urlGenerator,
 			$this->rootFolder,
 			$this->timeFactory,
 			$this->definitions,
-			$this->addressHandler
+			$this->addressHandler,
+			$this->botServerMapper,
+			$this->federationManager,
 		);
 	}
 
-	public function dataPrepareOne2One(): array {
+	public static function dataPrepareOne2One(): array {
 		return [
 			['admin', 'Admin', 'Admin invited you to a private conversation'],
 			['test', 'Test user', 'Test user invited you to a private conversation'],
@@ -354,7 +361,7 @@ class NotifierTest extends TestCase {
 		return $n;
 	}
 
-	public function dataPrepareGroup() {
+	public static function dataPrepareGroup() {
 		return [
 			[Room::TYPE_GROUP, 'admin', 'Admin', 'Group', 'Admin invited you to a group conversation: Group'],
 			[Room::TYPE_PUBLIC, 'test', 'Test user', 'Public', 'Test user invited you to a group conversation: Public'],
@@ -486,7 +493,7 @@ class NotifierTest extends TestCase {
 		$this->notifier->prepare($n, 'de');
 	}
 
-	public function dataPrepareChatMessage(): array {
+	public static function dataPrepareChatMessage(): array {
 		return [
 			'one-to-one mention' => [
 				$subject = 'mention', Room::TYPE_ONE_TO_ONE, ['userType' => 'users', 'userId' => 'testUser'], 'Test user', 'Test user',
@@ -941,10 +948,15 @@ class NotifierTest extends TestCase {
 			$userManagerGet['with'][] = [$subjectParameters['userId']];
 			$userManagerGet['willReturn'][] = null;
 		}
+		$i = 0;
 		$this->userManager->expects($this->exactly(count($userManagerGet['with'])))
 			->method('getDisplayName')
-			->withConsecutive(...$userManagerGet['with'])
-			->willReturnOnConsecutiveCalls(...$userManagerGet['willReturn']);
+			->willReturnCallback(function () use ($userManagerGet, &$i) {
+				Assert::assertArrayHasKey($i, $userManagerGet['with']);
+				Assert::assertSame($userManagerGet['with'][$i], func_get_args());
+				$i++;
+				return $userManagerGet['willReturn'][$i - 1];
+			});
 
 		$comment = $this->createMock(IComment::class);
 		$comment->expects($this->any())
@@ -1050,7 +1062,7 @@ class NotifierTest extends TestCase {
 		$this->assertEquals($notification, $this->notifier->prepare($notification, 'de'));
 	}
 
-	public function dataPrepareThrows() {
+	public static function dataPrepareThrows() {
 		return [
 			['Incorrect app', 'invalid-app', null, null, null, null, null],
 			'User can not use Talk' => [AlreadyProcessedException::class, 'spreed', true, null, null, null, null],

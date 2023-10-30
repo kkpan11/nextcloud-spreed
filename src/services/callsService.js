@@ -26,7 +26,9 @@ import { generateOcsUrl } from '@nextcloud/router'
 import {
 	signalingJoinCall,
 	signalingLeaveCall,
+	signalingSendCallMessage,
 } from '../utils/webrtc/index.js'
+import { PARTICIPANT } from '../constants.js'
 
 /**
  * Join a call as participant
@@ -43,11 +45,12 @@ import {
  * @param {number} flags The available PARTICIPANT.CALL_FLAG for this participants
  * @param {boolean} silent Whether the call should trigger a notifications and
  * sound for other participants or not
+ * @param {boolean} recordingConsent Whether the participant gave his consent to be recorded
  * @return {number} The actual flags based on the available media
  */
-const joinCall = async function(token, flags, silent) {
+const joinCall = async function(token, flags, silent, recordingConsent) {
 	try {
-		return await signalingJoinCall(token, flags, silent)
+		return await signalingJoinCall(token, flags, silent, recordingConsent)
 	} catch (error) {
 		console.debug('Error while joining call: ', error)
 	}
@@ -68,12 +71,92 @@ const leaveCall = async function(token, all = false) {
 }
 
 const fetchPeers = async function(token, options) {
-	const response = await axios.get(generateOcsUrl('apps/spreed/api/v4/call/{token}', { token }), options)
-	return response
+	return await axios.get(generateOcsUrl('apps/spreed/api/v4/call/{token}', { token }), options)
+}
+
+/**
+ * Call participant via SIP DialOut
+ *
+ * @param {string} token The token of the conversation
+ * @param {number} attendeeId The attendee id to call to via SIP
+ */
+const callSIPDialOut = async function(token, attendeeId) {
+	return axios.post(generateOcsUrl('apps/spreed/api/v4/call/{token}/dialout/{attendeeId}', { token, attendeeId }))
+}
+
+/**
+ * Hang up for phone participant
+ *
+ * @param {string} sessionId Session id of receiver
+ */
+const callSIPHangupPhone = async function(sessionId) {
+	await callSIPSendCallMessage(sessionId, { type: 'hangup' })
+}
+
+/**
+ * Mute phone participant (prevent from speaking)
+ *
+ * @param {string} sessionId Session id of receiver
+ */
+const callSIPMutePhone = async function(sessionId) {
+	await callSIPSendCallMessage(sessionId, { type: 'mute', audio: PARTICIPANT.SIP_DIALOUT_FLAG.MUTE_MICROPHONE })
+}
+
+/**
+ * Unmute phone participant (allow to speaking and listening)
+ *
+ * @param {string} sessionId Session id of receiver
+ */
+const callSIPUnmutePhone = async function(sessionId) {
+	await callSIPSendCallMessage(sessionId, { type: 'mute', audio: PARTICIPANT.SIP_DIALOUT_FLAG.NONE })
+}
+
+/**
+ * Hold a participant (prevent from listening)
+ *
+ * @param {string} sessionId Session id of receiver
+ */
+const callSIPHoldPhone = async function(sessionId) {
+	await callSIPSendCallMessage(sessionId, { type: 'mute', audio: PARTICIPANT.SIP_DIALOUT_FLAG.MUTE_MICROPHONE | PARTICIPANT.SIP_DIALOUT_FLAG.MUTE_SPEAKER })
+}
+
+/**
+ * Send DTMF digits one per message (allowed characters: 0-9, *, #)
+ *
+ * @param {string} sessionId Session id of receiver
+ * @param {string} digit DTMF digit to send
+ */
+const callSIPSendDTMF = async function(sessionId, digit) {
+	await callSIPSendCallMessage(sessionId, { type: 'dtmf', digit })
+}
+
+/**
+ * Send a message to SIP via signaling
+ *
+ * @param {string} sessionId Session id of receiver
+ * @param {object} data Payload for message to be sent
+ */
+const callSIPSendCallMessage = async function(sessionId, data) {
+	if (!sessionId) {
+		console.debug('Session ID has not been provided')
+		return
+	}
+
+	try {
+		await signalingSendCallMessage({ type: 'control', payload: data, to: sessionId })
+	} catch (error) {
+		console.debug('Error while sending message: ', error)
+	}
 }
 
 export {
 	joinCall,
 	leaveCall,
 	fetchPeers,
+	callSIPDialOut,
+	callSIPHangupPhone,
+	callSIPMutePhone,
+	callSIPUnmutePhone,
+	callSIPHoldPhone,
+	callSIPSendDTMF,
 }

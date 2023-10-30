@@ -10,10 +10,12 @@ module.exports = {
 		IS_DESKTOP: 'readonly',
 	},
 	rules: {
+		'comma-dangle': 'off',
+		'jsdoc/no-defaults': 'off',
 		'import/newline-after-import': 'warn',
 		'import/no-named-as-default-member': 'off',
 		'import/order': [
-			'warn',
+			'off', // TODO disabled with #10622 as it breaks tests and changes many components
 			{
 				groups: ['builtin', 'external', 'internal', ['parent', 'sibling', 'index'], 'unknown'],
 				pathGroups: [
@@ -59,6 +61,11 @@ module.exports = {
 				warnOnUnassignedImports: true,
 			},
 		],
+		'import/no-unresolved': ['error', {
+			// Ignore Webpack query parameters, not supported by eslint-plugin-import
+			// https://github.com/import-js/eslint-plugin-import/issues/2562
+			ignore: ['\\?raw$'],
+		}],
 		// Prepare for Vue 3 Migration
 		'vue/no-deprecated-data-object-declaration': 'warn',
 		'vue/no-deprecated-events-api': 'warn',

@@ -33,10 +33,7 @@
 				:sub-text="getSubText(item)"
 				:item="item">
 				<template #avatar>
-					<ConversationIcon :item="item"
-						:hide-favorite="true"
-						:hide-call="false"
-						:disable-menu="true" />
+					<ConversationIcon :item="item" :hide-call="false" />
 				</template>
 			</NcDashboardWidgetItem>
 		</template>
@@ -188,7 +185,7 @@ export default {
 			axios.get(generateOcsUrl('apps/spreed/api/v4/room')).then((response) => {
 				const allRooms = response.data.ocs.data
 				// filter out breakout rooms
-				const rooms = allRooms.filter((conversation) => conversation.objectType !== 'room')
+				const rooms = allRooms.filter((conversation) => conversation.objectType !== CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM)
 				const importantRooms = rooms.filter((conversation) => {
 					return conversation.hasCall
 						|| conversation.unreadMention

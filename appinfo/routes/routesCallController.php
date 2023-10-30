@@ -24,7 +24,7 @@ declare(strict_types=1);
  */
 
 $requirements = [
-	'apiVersion' => 'v4',
+	'apiVersion' => '(v4)',
 	'token' => '[a-z0-9]{4,30}',
 ];
 
@@ -36,6 +36,8 @@ return [
 		['name' => 'Call#joinCall', 'url' => '/api/{apiVersion}/call/{token}', 'verb' => 'POST', 'requirements' => $requirements],
 		/** @see \OCA\Talk\Controller\CallController::ringAttendee() */
 		['name' => 'Call#ringAttendee', 'url' => '/api/{apiVersion}/call/{token}/ring/{attendeeId}', 'verb' => 'POST', 'requirements' => $requirements],
+		/** @see \OCA\Talk\Controller\CallController::sipDialOut() */
+		['name' => 'Call#sipDialOut', 'url' => '/api/{apiVersion}/call/{token}/dialout/{attendeeId}', 'verb' => 'POST', 'requirements' => $requirements],
 		/** @see \OCA\Talk\Controller\CallController::updateCallFlags() */
 		['name' => 'Call#updateCallFlags', 'url' => '/api/{apiVersion}/call/{token}', 'verb' => 'PUT', 'requirements' => $requirements],
 		/** @see \OCA\Talk\Controller\CallController::leaveCall() */

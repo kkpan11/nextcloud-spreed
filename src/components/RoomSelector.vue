@@ -46,10 +46,7 @@
 							:key="room.token"
 							:class="{selected: selectedRoom === room.token }"
 							@click="selectedRoom=room.token">
-							<ConversationIcon :item="room"
-								:hide-call="true"
-								:hide-favorite="false"
-								:disable-menu="true" />
+							<ConversationIcon :item="room" :hide-favorite="false" />
 							<span>{{ room.displayName }}</span>
 						</li>
 					</ul>
@@ -142,8 +139,8 @@ export default {
 				return room.type !== CONVERSATION.TYPE.CHANGELOG
 					&& (!this.currentRoom || this.currentRoom !== room.token)
 					&& (!this.showPostableOnly || room.readOnly === CONVERSATION.STATE.READ_WRITE)
-					&& room.objectType !== 'file'
-					&& room.objectType !== 'share:password'
+					&& room.objectType !== CONVERSATION.OBJECT_TYPE.FILE
+					&& room.objectType !== CONVERSATION.OBJECT_TYPE.VIDEO_VERIFICATION
 			})
 			if (!this.searchText) {
 				return roomsTemp
@@ -211,6 +208,12 @@ export default {
 	height: 700px;
 }
 
+/* FIXME: remove after https://github.com/nextcloud-libraries/nextcloud-vue/pull/4350 regression is solved */
+/* Force modal close button to be above modal content */
+:deep(.modal-container__close) {
+	z-index: 1;
+}
+
 .talk-modal {
 	height: 80vh;
 }
@@ -225,6 +228,7 @@ export default {
 	justify-content: center;
 	height: 100%;
 	box-sizing: border-box;
+
 	h2 {
 		margin-bottom: 4px;
 	}
@@ -244,13 +248,13 @@ export default {
 	height: 100%;
 }
 
-.no-match-message{
+.no-match-message {
 	padding: 40px 0;
 	text-align: center;
 
 }
 
-.no-match-title{
+.no-match-title {
 	font-weight: normal;
 }
 

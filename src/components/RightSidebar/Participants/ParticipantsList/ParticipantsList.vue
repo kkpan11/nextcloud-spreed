@@ -20,33 +20,28 @@
 -->
 
 <template>
-	<div>
-		<ul>
-			<Participant v-for="item in items"
-				:key="generateKey(item)"
-				:participant="item"
-				:is-selectable="participantsSelectable"
-				:show-user-status="showUserStatus"
-				@click-participant="handleClickParticipant" />
-		</ul>
-		<template v-if="loading">
-			<LoadingParticipant v-for="n in dummyParticipants"
-				:key="n" />
-		</template>
-	</div>
+	<ul>
+		<Participant v-for="item in items"
+			:key="generateKey(item)"
+			:participant="item"
+			:is-selectable="participantsSelectable"
+			:show-user-status="showUserStatus"
+			@click-participant="handleClickParticipant" />
+		<LoadingPlaceholder v-if="loading" type="participants" :count="dummyParticipants" />
+	</ul>
 </template>
 
 <script>
 
-import LoadingParticipant from './Participant/LoadingParticipant.vue'
+import LoadingPlaceholder from '../../../LoadingPlaceholder.vue'
 import Participant from './Participant/Participant.vue'
 
 export default {
 	name: 'ParticipantsList',
 
 	components: {
+		LoadingPlaceholder,
 		Participant,
-		LoadingParticipant,
 	},
 
 	props: {

@@ -9,6 +9,8 @@
     "Invalid image" : "Nevalida bildo",
     "Unknown filetype" : "Nekonata dosiertipo",
     "Dismiss notification" : "Forsendi sciigon",
+    "Accept" : "Akcepti",
+    "Decline" : "Malakcepti",
     "Avatar image is not square" : "Avatarbildo ne estas kvadrata",
     "Andorra" : "Andoro",
     "United Arab Emirates" : "Unuiĝintaj Arabaj Emirlandoj",
@@ -301,16 +303,15 @@
     "Devices" : "Aparatoj",
     "Upload" : "Alŝuti",
     "Files" : "Dosieroj",
-    "Dismiss" : "Preterpasi",
     "Reply" : "Respondi",
     "Translate" : "Traduku",
+    "Dismiss" : "Preterpasi",
     "Contact" : "Kontakto",
     "Today" : "Hodiaŭ",
     "Yesterday" : "Hieraŭ",
     "Group" : "Grupo",
     "Create new poll" : "Krei novan enketon",
     "Settings" : "Agordoj",
-    "Send" : "Sendi",
     "Join" : "Aliĝi",
     "guest" : "gasto",
     "No results" : "Neniu rezulto",
@@ -318,6 +319,7 @@
     "Chat" : "Babili",
     "Details" : "Detaloj",
     "Privacy" : "Privateco",
+    "Performance" : "Rendimento",
     "Keyboard shortcuts" : "Fulmoklavoj",
     "Search" : "Serĉi",
     "Open sidebar" : "Malfermi flankopanelon",
@@ -329,6 +331,7 @@
     "The password is wrong. Try again." : "La pasvorto malĝustas. Provu denove.",
     "Android app" : "Android-aplikaĵo",
     "iOS app" : "iOS-aplikaĵo",
-    "More actions" : "Pliaj agoj"
+    "More actions" : "Pliaj agoj",
+    "Send" : "Sendi"
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

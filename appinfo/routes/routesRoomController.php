@@ -24,11 +24,11 @@ declare(strict_types=1);
  */
 
 $requirements = [
-	'apiVersion' => 'v4',
+	'apiVersion' => '(v4)',
 ];
 
 $requirementsWithToken = [
-	'apiVersion' => 'v4',
+	'apiVersion' => '(v4)',
 	'token' => '[a-z0-9]{4,30}',
 ];
 
@@ -40,6 +40,8 @@ return [
 		['name' => 'Room#getListedRooms', 'url' => '/api/{apiVersion}/listed-room', 'verb' => 'GET', 'requirements' => $requirements],
 		/** @see \OCA\Talk\Controller\RoomController::createRoom() */
 		['name' => 'Room#createRoom', 'url' => '/api/{apiVersion}/room', 'verb' => 'POST', 'requirements' => $requirements],
+		/** @see \OCA\Talk\Controller\RoomController::getNoteToSelfConversation() */
+		['name' => 'Room#getNoteToSelfConversation', 'url' => '/api/{apiVersion}/room/note-to-self', 'verb' => 'GET', 'requirements' => $requirements],
 		/** @see \OCA\Talk\Controller\RoomController::getSingleRoom() */
 		['name' => 'Room#getSingleRoom', 'url' => '/api/{apiVersion}/room/{token}', 'verb' => 'GET', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::getBreakoutRooms() */
@@ -84,6 +86,8 @@ return [
 		['name' => 'Room#resendInvitations', 'url' => '/api/{apiVersion}/room/{token}/participants/resend-invitations', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::leaveRoom() */
 		['name' => 'Room#leaveRoom', 'url' => '/api/{apiVersion}/room/{token}/participants/active', 'verb' => 'DELETE', 'requirements' => $requirementsWithToken],
+		/** @see \OCA\Talk\Controller\RoomController::setSessionState() */
+		['name' => 'Room#setSessionState', 'url' => '/api/{apiVersion}/room/{token}/participants/state', 'verb' => 'PUT', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::promoteModerator() */
 		['name' => 'Room#promoteModerator', 'url' => '/api/{apiVersion}/room/{token}/moderators', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::demoteModerator() */
@@ -92,12 +96,18 @@ return [
 		['name' => 'Room#addToFavorites', 'url' => '/api/{apiVersion}/room/{token}/favorite', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::removeFromFavorites() */
 		['name' => 'Room#removeFromFavorites', 'url' => '/api/{apiVersion}/room/{token}/favorite', 'verb' => 'DELETE', 'requirements' => $requirementsWithToken],
-		/** @see \OCA\Talk\Controller\RoomController::getParticipantByDialInPin() */
-		['name' => 'Room#getParticipantByDialInPin', 'url' => '/api/{apiVersion}/room/{token}/pin/{pin}', 'verb' => 'GET', 'requirements' => array_merge($requirementsWithToken, [
+		/** @see \OCA\Talk\Controller\RoomController::verifyDialInPin() */
+		['name' => 'Room#verifyDialInPin', 'url' => '/api/{apiVersion}/room/{token}/pin/{pin}', 'verb' => 'GET', 'requirements' => array_merge($requirementsWithToken, [
 			'pin' => '\d{7,32}',
 		])],
+		/** @see \OCA\Talk\Controller\RoomController::verifyDialInPin() */
+		['name' => 'Room#verifyDialInPin', 'url' => '/api/{apiVersion}/room/{token}/verify-dialin', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
+		/** @see \OCA\Talk\Controller\RoomController::verifyDialOutNumber() */
+		['name' => 'Room#verifyDialOutNumber', 'url' => '/api/{apiVersion}/room/{token}/verify-dialout', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::createGuestByDialIn() */
 		['name' => 'Room#createGuestByDialIn', 'url' => '/api/{apiVersion}/room/{token}/open-dial-in', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
+		/** @see \OCA\Talk\Controller\RoomController::rejectedDialOutRequest() */
+		['name' => 'Room#rejectedDialOutRequest', 'url' => '/api/{apiVersion}/room/{token}/rejected-dialout', 'verb' => 'DELETE', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::setNotificationLevel() */
 		['name' => 'Room#setNotificationLevel', 'url' => '/api/{apiVersion}/room/{token}/notify', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::setNotificationCalls() */
@@ -106,6 +116,8 @@ return [
 		['name' => 'Room#setLobby', 'url' => '/api/{apiVersion}/room/{token}/webinar/lobby', 'verb' => 'PUT', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::setSIPEnabled() */
 		['name' => 'Room#setSIPEnabled', 'url' => '/api/{apiVersion}/room/{token}/webinar/sip', 'verb' => 'PUT', 'requirements' => $requirementsWithToken],
+		/** @see \OCA\Talk\Controller\RoomController::setRecordingConsent() */
+		['name' => 'Room#setRecordingConsent', 'url' => '/api/{apiVersion}/room/{token}/recording-consent', 'verb' => 'PUT', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\RoomController::setMessageExpiration() */
 		['name' => 'Room#setMessageExpiration', 'url' => '/api/{apiVersion}/room/{token}/message-expiration', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
 	],

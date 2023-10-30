@@ -23,8 +23,10 @@ declare(strict_types=1);
 
 namespace OCA\Talk;
 
+use OCA\Talk\Events\BeforeTurnServersGetEvent;
 use OCA\Talk\Events\GetTurnServersEvent;
 use OCA\Talk\Model\Attendee;
+use OCA\Talk\Service\RecordingService;
 use OCA\Talk\Vendor\Firebase\JWT\JWT;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\EventDispatcher\IEventDispatcher;
@@ -43,6 +45,14 @@ class Config {
 	public const SIGNALING_TICKET_V1 = 1;
 	public const SIGNALING_TICKET_V2 = 2;
 
+	/**
+	 * Currently limiting to 1k users because the user_status API would yield
+	 * an error on Oracle otherwise. Clients should use a virtual scrolling
+	 * mechanism so the data should not be a problem nowadays
+	 */
+	public const USER_STATUS_INTEGRATION_LIMIT = 1000;
+
+	/** @var array<string, bool> */
 	protected array $canEnableSIP = [];
 
 	public function __construct(
@@ -132,6 +142,18 @@ class Config {
 		return $this->canEnableSIP[$user->getUID()];
 	}
 
+	public function canUserDialOutSIP(IUser $user): bool {
+		if (!$this->isSIPDialOutEnabled()) {
+			return false;
+		}
+
+		return $this->canUserEnableSIP($user);
+	}
+
+	public function isSIPDialOutEnabled(): bool {
+		return $this->config->getAppValue('spreed', 'sip_dialout', 'no') !== 'no';
+	}
+
 	public function getRecordingServers(): array {
 		$config = $this->config->getAppValue('spreed', 'recording_servers');
 		$recording = json_decode($config, true);
@@ -173,6 +195,28 @@ class Config {
 		}
 
 		return true;
+	}
+
+	/**
+	 * @return RecordingService::CONSENT_REQUIRED_*
+	 */
+	public function recordingConsentRequired(): int {
+		if (!$this->isRecordingEnabled()) {
+			return RecordingService::CONSENT_REQUIRED_NO;
+		}
+
+		return $this->getRecordingConsentConfig();
+	}
+
+	/**
+	 * @return RecordingService::CONSENT_REQUIRED_*
+	 */
+	public function getRecordingConsentConfig(): int {
+		return match ((int) $this->config->getAppValue('spreed', 'recording_consent', (string) RecordingService::CONSENT_REQUIRED_NO)) {
+			RecordingService::CONSENT_REQUIRED_YES => RecordingService::CONSENT_REQUIRED_YES,
+			RecordingService::CONSENT_REQUIRED_OPTIONAL => RecordingService::CONSENT_REQUIRED_OPTIONAL,
+			default => RecordingService::CONSENT_REQUIRED_NO,
+		};
 	}
 
 	public function getRecordingFolder(string $userId): string {
@@ -311,6 +355,8 @@ class Config {
 
 		if ($withEvent) {
 			$event = new GetTurnServersEvent($servers);
+			$this->dispatcher->dispatchTyped($event);
+			$event = new BeforeTurnServersGetEvent($event->getServers());
 			$this->dispatcher->dispatchTyped($event);
 			$servers = $event->getServers();
 		}

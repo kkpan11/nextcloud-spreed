@@ -71,7 +71,7 @@
 
 				<!-- Device settings -->
 				<NcActionButton close-after-click
-					@click="showMediaSettings">
+					@click="showMediaSettingsDialog">
 					<template #icon>
 						<VideoIcon :size="20" />
 					</template>
@@ -277,7 +277,7 @@ export default {
 		},
 
 		isFileConversation() {
-			return this.conversation.objectType === 'file' && this.conversation.objectId
+			return this.conversation.objectType === CONVERSATION.OBJECT_TYPE.FILE && this.conversation.objectId
 		},
 
 		linkToFile() {
@@ -446,7 +446,7 @@ export default {
 			this.$store.dispatch('selectedVideoPeerId', null)
 		},
 
-		showMediaSettings() {
+		showMediaSettingsDialog() {
 			emit('talk:media-settings:show')
 		},
 
@@ -490,10 +490,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/variables';
-.top-bar {
-	&__wrapper {
-		display: flex;
-	}
+.top-bar__wrapper {
+	display: flex;
 }
 </style>

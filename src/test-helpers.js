@@ -20,6 +20,8 @@
  *
  */
 
+import { cloneDeep } from 'lodash'
+
 import NcActionButton from '@nextcloud/vue/dist/Components/NcActionButton.js'
 import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
 import NcListItem from '@nextcloud/vue/dist/Components/NcListItem.js'
@@ -68,12 +70,73 @@ function findNcButton(wrapper, text) {
 function findNcListItems(wrapper, text) {
 	const listItems = wrapper.findAllComponents(NcListItem)
 	return (Array.isArray(text))
-		? listItems.filter(listItem => text.includes(listItem.vm.title))
-		: listItems.filter(listItem => listItem.vm.title === text)
+		? listItems.filter(listItem => text.includes(listItem.vm.name))
+		: listItems.filter(listItem => listItem.vm.name === text)
+}
+
+/**
+ *
+ * @param {object} data response from the server
+ * @param {object} [data.headers = {}] headers of response
+ * @param {object} [data.payload = {}] payload of response
+ * @param {number} [data.status = 200] status code of response
+ * @return {object}
+ */
+function generateOCSResponse({ headers = {}, payload = {}, status = 200 }) {
+	return {
+		headers,
+		status,
+		data: {
+			ocs: {
+				data: cloneDeep(payload),
+				meta: (status >= 200 && status < 400)
+					? {
+						status: 'ok',
+						statuscode: status,
+						message: 'OK',
+					}
+					: {
+						status: 'failure',
+						statuscode: status,
+						message: '',
+					},
+			},
+		},
+	}
+}
+
+/**
+ *
+ * @param {object} data response from the server
+ * @param {object} [data.headers = {}] headers of response
+ * @param {object} [data.payload = {}] payload of response
+ * @param {number} data.status status code of response
+ * @return {object}
+ */
+function generateOCSErrorResponse({ headers = {}, payload = {}, status }) {
+	return {
+		headers,
+		status,
+		response: {
+			status,
+			data: {
+				ocs: {
+					data: cloneDeep(payload),
+					meta: {
+						status: 'failure',
+						statuscode: status,
+						message: '',
+					},
+				},
+			},
+		},
+	}
 }
 
 export {
 	findNcActionButton,
 	findNcButton,
 	findNcListItems,
+	generateOCSResponse,
+	generateOCSErrorResponse,
 }

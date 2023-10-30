@@ -71,8 +71,6 @@ appstore:
 	rsync -a \
 	--exclude=babel.config.js \
 	--exclude=/build \
-	--exclude=composer.json \
-	--exclude=composer.lock \
 	--exclude=docs \
 	--exclude=.drone.jsonnet \
 	--exclude=.drone.yml \
@@ -89,14 +87,13 @@ appstore:
 	--exclude=mkdocs.yml \
 	--exclude=Makefile \
 	--exclude=node_modules \
-	--exclude=package.json \
-	--exclude=package-lock.json \
 	--exclude=.php-cs-fixer.cache \
 	--exclude=.php-cs-fixer.dist.php \
 	--exclude=.php_cs.cache \
 	--exclude=.php_cs.dist \
 	--exclude=psalm.xml \
 	--exclude=README.md \
+	--exclude=.readthedocs.yaml \
 	--exclude=/recording \
 	--exclude=/site \
 	--exclude=/src \

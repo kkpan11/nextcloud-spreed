@@ -5,6 +5,7 @@ declare(strict_types=1);
  * @copyright Copyright (c) 2023 Joas Schilling <coding@schilljs.com>
  *
  * @author Joas Schilling <coding@schilljs.com>
+ * @author Kate Döen <kate.doeen@nextcloud.com>
  *
  * @license GNU AGPL version 3 or any later version
  *
@@ -31,6 +32,7 @@ use OCA\Talk\Model\Attendee;
 use OCA\Talk\Model\BreakoutRoom;
 use OCA\Talk\Model\Session;
 use OCA\Talk\Participant;
+use OCA\Talk\ResponseDefinitions;
 use OCA\Talk\Room;
 use OCA\Talk\Webinary;
 use OCP\App\IAppManager;
@@ -43,6 +45,10 @@ use OCP\IUserManager;
 use OCP\UserStatus\IManager;
 use OCP\UserStatus\IUserStatus;
 
+/**
+ * @psalm-import-type TalkChatMessage from ResponseDefinitions
+ * @psalm-import-type TalkRoom from ResponseDefinitions
+ */
 class RoomFormatter {
 	public function __construct(
 		protected Config $talkConfig,
@@ -60,6 +66,9 @@ class RoomFormatter {
 	) {
 	}
 
+	/**
+	 * @return TalkRoom
+	 */
 	public function formatRoom(
 		string $responseFormat,
 		array $commonReadMessages,
@@ -80,6 +89,10 @@ class RoomFormatter {
 		);
 	}
 
+	/**
+	 * @param array<int, int> $commonReadMessages
+	 * @return TalkRoom
+	 */
 	public function formatRoomV4(
 		string $responseFormat,
 		array $commonReadMessages,
@@ -139,6 +152,7 @@ class RoomFormatter {
 			'isCustomAvatar' => $this->avatarService->isCustomAvatar($room),
 			'breakoutRoomMode' => BreakoutRoom::MODE_NOT_CONFIGURED,
 			'breakoutRoomStatus' => BreakoutRoom::STATUS_STOPPED,
+			'recordingConsent' => $this->talkConfig->recordingConsentRequired() === RecordingService::CONSENT_REQUIRED_OPTIONAL ? $room->getRecordingConsent() : $this->talkConfig->recordingConsentRequired(),
 		];
 
 		$lastActivity = $room->getLastActivity();
@@ -196,6 +210,7 @@ class RoomFormatter {
 			'hasCall' => $room->getActiveSince() instanceof \DateTimeInterface,
 			'callStartTime' => $room->getActiveSince() instanceof \DateTimeInterface ? $room->getActiveSince()->getTimestamp() : 0,
 			'callRecording' => $room->getCallRecording(),
+			'recordingConsent' => $this->talkConfig->recordingConsentRequired() === RecordingService::CONSENT_REQUIRED_OPTIONAL ? $room->getRecordingConsent() : $this->talkConfig->recordingConsentRequired(),
 			'lastActivity' => $lastActivity,
 			'callFlag' => $room->getCallFlag(),
 			'isFavorite' => $attendee->isFavorite(),
@@ -264,6 +279,7 @@ class RoomFormatter {
 			!($currentParticipant->getPermissions() & Attendee::PERMISSIONS_LOBBY_IGNORE)) {
 			// No participants and chat messages for users in the lobby.
 			$roomData['hasCall'] = false;
+			$roomData['canLeaveConversation'] = true;
 			return $roomData;
 		}
 
@@ -299,7 +315,7 @@ class RoomFormatter {
 				$roomData['canDeleteConversation'] = $room->getType() !== Room::TYPE_ONE_TO_ONE
 					&& $room->getType() !== Room::TYPE_ONE_TO_ONE_FORMER
 					&& $currentParticipant->hasModeratorPermissions(false);
-				$roomData['canLeaveConversation'] = true;
+				$roomData['canLeaveConversation'] = $room->getType() !== Room::TYPE_NOTE_TO_SELF;
 				$roomData['canEnableSIP'] =
 					$this->talkConfig->isSIPConfigured()
 					&& !preg_match(Room::SIP_INCOMPATIBLE_REGEX, $room->getToken())
@@ -311,12 +327,18 @@ class RoomFormatter {
 			$roomData['lastReadMessage'] = $attendee->getLastReadMessage();
 		}
 
+		if ($room->getRemoteServer() && $room->getRemoteToken()) {
+			$roomData['remoteServer'] = $room->getRemoteServer();
+			$roomData['remoteToken'] = $room->getRemoteToken();
+			$roomData['remoteAccessToken'] = $attendee->getAccessToken();
+		}
+
 		// FIXME This should not be done, but currently all the clients use it to get the avatar of the user …
 		if ($room->getType() === Room::TYPE_ONE_TO_ONE) {
 			$participants = json_decode($room->getName(), true);
 			foreach ($participants as $participant) {
 				if ($participant !== $attendee->getActorId()) {
-					$roomData['name'] = $participant;
+					$roomData['name'] = (string)$participant;
 
 					if ($statuses === null
 						&& $this->userId !== null
@@ -354,6 +376,9 @@ class RoomFormatter {
 		return $roomData;
 	}
 
+	/**
+	 * @return TalkChatMessage|array<empty>
+	 */
 	public function formatLastMessage(
 		string $responseFormat,
 		Room $room,

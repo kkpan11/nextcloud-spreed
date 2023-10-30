@@ -115,7 +115,7 @@
 
 ## 17
 * `avatar` - Avatar of conversation
-* `config => chat => translations` - List of translations tuples, JSON encoded sample `{"from":"de","fromLabel":"German","to":"en","toLabel":"English"}`. Those tuples should be provided as options when translating chat messages.
+* ~~`config => chat => translations` - List of translations tuples, JSON encoded sample `{"from":"de","fromLabel":"German","to":"en","toLabel":"English"}`. Those tuples should be provided as options when translating chat messages.~~ Due to some providers the list was too big causing issues in various clients. So the capability was replaced by boolean `config => chat => has-translation-providers` in Talk 18.
 * `config => call => predefined-backgrounds` - List of predefined virtual backgrounds. The files are in Talks img/ folder, accessible via the normal image path methods. The list is cached for 5 minutes.
 * `config => call => can-upload-background` - Boolean flag whether the user can upload a custom virtual background (requires an account and non-zero quota). Uploads should be done to Talk/Backgrounds/ (respecting the user's attachment directory setting).
 * `config => call => supported-reactions` - A list of emojis supported as call reactions. If the list is absent or empty, clients should not show the emoji reaction option in calls.
@@ -126,3 +126,15 @@
 * `remind-me-later` - Support for "Remind me later" for chat messages exists
 * `bots-v1` - Support of the first version for Bots and Webhooks is available
 * `markdown-messages` - Chat messages support markdown and are rendered automatically
+
+## 18
+* `media-caption` - Whether media caption can be added to shared files
+* `session-state` - Sessions can mark themselves as inactive, so the participant receives notifications again
+* `note-to-self` - Support for "Note-to-self" conversation exists
+* `recording-consent` - Whether admins and moderators can require recording consent before joining a call
+* `sip-support-dialout` - Whether admins can enable SIP dial-out
+* `config => chat => has-translation-providers` - When true, translation tuples can be loaded from the [OCS Translation API](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/ocs-translation-api.html#get-available-translation-options).
+* `config => call => recording-consent` - Whether users need to consent into call recording before joining a call (see [constants list](constants.md#recording-consent-required))
+* `config => call => sip-enabled` - Whether SIP is configured on the server allowing for SIP dial-in
+* `config => call => sip-dialout-enabled` - Whether SIP dial-out is configured on the server, additionally requires `config => call => sip-enabled`
+* `config => call => can-enable-sip` - Whether the current user is a member of the groups that are allowed to enable SIP dial-in on a conversation or use SIP dial-out

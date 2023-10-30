@@ -30,9 +30,11 @@ use OCA\Talk\Events\VerifyRoomPasswordEvent;
 use OCA\Talk\Exceptions\RoomNotFoundException;
 use OCA\Talk\Manager;
 use OCA\Talk\Model\Attendee;
+use OCA\Talk\Model\BreakoutRoom;
 use OCA\Talk\Participant;
 use OCA\Talk\Room;
 use OCA\Talk\Service\ParticipantService;
+use OCA\Talk\Service\RecordingService;
 use OCA\Talk\Service\RoomService;
 use OCA\Talk\Webinary;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -191,7 +193,7 @@ class RoomServiceTest extends TestCase {
 		$this->assertSame($room, $this->service->createOneToOneConversation($user1, $user2));
 	}
 
-	public function dataCreateConversationInvalidNames(): array {
+	public static function dataCreateConversationInvalidNames(): array {
 		return [
 			[''],
 			['        '],
@@ -217,12 +219,12 @@ class RoomServiceTest extends TestCase {
 		$this->service->createConversation(Room::TYPE_GROUP, $name);
 	}
 
-	public function dataCreateConversationInvalidTypes(): array {
+	public static function dataCreateConversationInvalidTypes(): array {
 		return [
 			[Room::TYPE_ONE_TO_ONE],
 			[Room::TYPE_UNKNOWN],
 			[Room::TYPE_ONE_TO_ONE_FORMER],
-			[6],
+			[7],
 		];
 	}
 
@@ -239,7 +241,7 @@ class RoomServiceTest extends TestCase {
 		$this->service->createConversation($type, 'abc');
 	}
 
-	public function dataCreateConversationInvalidObjects(): array {
+	public static function dataCreateConversationInvalidObjects(): array {
 		return [
 			[str_repeat('a', 65), 'a', 'object_type'],
 			['a', str_repeat('a', 65), 'object_id'],
@@ -263,7 +265,7 @@ class RoomServiceTest extends TestCase {
 		$this->service->createConversation(Room::TYPE_PUBLIC, 'a', null, $type, $id);
 	}
 
-	public function dataCreateConversation(): array {
+	public static function dataCreateConversation(): array {
 		return [
 			[Room::TYPE_GROUP, 'Group conversation', 'admin', '', ''],
 			[Room::TYPE_PUBLIC, 'Public conversation', '', 'files', '123456'],
@@ -311,7 +313,7 @@ class RoomServiceTest extends TestCase {
 		$this->assertSame($room, $this->service->createConversation($type, $name, $owner, $objectType, $objectId));
 	}
 
-	public function dataPrepareConversationName(): array {
+	public static function dataPrepareConversationName(): array {
 		return [
 			['', ''],
 			['    ', ''],
@@ -374,7 +376,7 @@ class RoomServiceTest extends TestCase {
 			Room::LISTABLE_NONE,
 			0,
 			Webinary::LOBBY_NONE,
-			0,
+			Webinary::SIP_DISABLED,
 			null,
 			'foobar',
 			'Test',
@@ -394,9 +396,10 @@ class RoomServiceTest extends TestCase {
 			null,
 			'',
 			'',
-			0,
-			0,
-			0
+			BreakoutRoom::MODE_NOT_CONFIGURED,
+			BreakoutRoom::STATUS_STOPPED,
+			Room::RECORDING_NONE,
+			RecordingService::CONSENT_REQUIRED_NO,
 		);
 
 		$verificationResult = $service->verifyPassword($room, '1234');

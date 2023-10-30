@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace OCA\Talk;
 
 use OCA\Talk\Chat\CommentsManager;
+use OCA\Talk\Events\RoomCreatedEvent;
 use OCA\Talk\Events\RoomEvent;
 use OCA\Talk\Exceptions\ParticipantNotFoundException;
 use OCA\Talk\Exceptions\RoomNotFoundException;
@@ -53,6 +54,7 @@ use OCP\Security\ISecureRandom;
 use OCP\Server;
 
 class Manager {
+	/** @deprecated */
 	public const EVENT_TOKEN_GENERATE = self::class . '::generateNewToken';
 
 	protected ICommentsManager $commentsManager;
@@ -132,6 +134,7 @@ class Manager {
 			'breakout_room_mode' => 0,
 			'breakout_room_status' => 0,
 			'call_recording' => 0,
+			'recording_consent' => 0,
 		], $data));
 	}
 
@@ -198,7 +201,8 @@ class Manager {
 			(string) $row['object_id'],
 			(int) $row['breakout_room_mode'],
 			(int) $row['breakout_room_status'],
-			(int) $row['call_recording']
+			(int) $row['call_recording'],
+			(int) $row['recording_consent'],
 		);
 	}
 
@@ -355,7 +359,9 @@ class Manager {
 
 			$room = $this->createRoomObject($row);
 			if ($actorType === Attendee::ACTOR_USERS && isset($row['actor_id'])) {
-				$room->setParticipant($row['actor_id'], $this->createParticipantObject($room, $row));
+				$participant = $this->createParticipantObject($room, $row);
+				$this->participantService->cacheParticipant($room, $participant);
+				$room->setParticipant($row['actor_id'], $participant);
 			}
 			$rooms[] = $room;
 		}
@@ -542,7 +548,9 @@ class Manager {
 
 		$room = $this->createRoomObject($row);
 		if ($userId !== null && isset($row['actor_id'])) {
-			$room->setParticipant($row['actor_id'], $this->createParticipantObject($room, $row));
+			$participant = $this->createParticipantObject($room, $row);
+			$this->participantService->cacheParticipant($room, $participant);
+			$room->setParticipant($row['actor_id'], $participant);
 		}
 
 		if ($userId === null && $room->getType() !== Room::TYPE_PUBLIC) {
@@ -613,7 +621,9 @@ class Manager {
 
 		$room = $this->createRoomObject($row);
 		if ($userId !== null && isset($row['actor_id'])) {
-			$room->setParticipant($row['actor_id'], $this->createParticipantObject($room, $row));
+			$participant = $this->createParticipantObject($room, $row);
+			$this->participantService->cacheParticipant($room, $participant);
+			$room->setParticipant($row['actor_id'], $participant);
 		}
 
 		if ($isSIPBridgeRequest || $room->getType() === Room::TYPE_PUBLIC) {
@@ -627,7 +637,6 @@ class Manager {
 			}
 
 			// never joined before but found in listing
-			$listable = (int)$row['listable'];
 			if ($this->isRoomListableByUser($room, $userId)) {
 				return $room;
 			}
@@ -716,7 +725,64 @@ class Manager {
 
 		$room = $this->createRoomObject($row);
 		if ($actorType === Attendee::ACTOR_USERS && isset($row['actor_id'])) {
-			$room->setParticipant($row['actor_id'], $this->createParticipantObject($room, $row));
+			$participant = $this->createParticipantObject($room, $row);
+			$this->participantService->cacheParticipant($room, $participant);
+			$room->setParticipant($row['actor_id'], $participant);
+		}
+
+		return $room;
+	}
+
+	/**
+	 * @param string $token
+	 * @param string $actorType
+	 * @param string $actorId
+	 * @param string $remoteAccess
+	 * @param ?string $sessionId
+	 * @return Room
+	 * @throws RoomNotFoundException
+	 */
+	public function getRoomByRemoteAccess(string $token, string $actorType, string $actorId, string $remoteAccess, ?string $sessionId = null): Room {
+		$query = $this->db->getQueryBuilder();
+		$helper = new SelectHelper();
+		$helper->selectRoomsTable($query);
+		$helper->selectAttendeesTable($query);
+		$query->from('talk_rooms', 'r')
+			->leftJoin('r', 'talk_attendees', 'a', $query->expr()->andX(
+				$query->expr()->eq('a.actor_type', $query->createNamedParameter($actorType)),
+				$query->expr()->eq('a.actor_id', $query->createNamedParameter($actorId)),
+				$query->expr()->eq('a.access_token', $query->createNamedParameter($remoteAccess)),
+				$query->expr()->eq('a.room_id', 'r.id')
+			))
+			->where($query->expr()->eq('r.token', $query->createNamedParameter($token)));
+
+		if ($sessionId !== null) {
+			$helper->selectSessionsTable($query);
+			$query->leftJoin('a', 'talk_sessions', 's', $query->expr()->andX(
+				$query->expr()->eq('s.session_id', $query->createNamedParameter($sessionId)),
+				$query->expr()->eq('a.id', 's.attendee_id')
+			));
+		}
+
+		$result = $query->executeQuery();
+		$row = $result->fetch();
+		$result->closeCursor();
+
+		if ($row === false) {
+			throw new RoomNotFoundException();
+		}
+
+		if ($row['token'] === null) {
+			// FIXME Temporary solution for the Talk6 release
+			throw new RoomNotFoundException();
+		}
+
+		$room = $this->createRoomObject($row);
+		if (isset($row['actor_id'])) {
+			$participant = $this->createParticipantObject($room, $row);
+			$this->participantService->cacheParticipant($room, $participant);
+		} else {
+			throw new RoomNotFoundException();
 		}
 
 		return $room;
@@ -870,6 +936,7 @@ class Manager {
 
 		$room = $this->createRoomObject($row);
 		$participant = $this->createParticipantObject($room, $row);
+		$this->participantService->cacheParticipant($room, $participant);
 		$room->setParticipant($row['actor_id'], $participant);
 
 		if ($room->getType() === Room::TYPE_PUBLIC || !in_array($participant->getAttendee()->getParticipantType(), [Participant::GUEST, Participant::GUEST_MODERATOR, Participant::USER_SELF_JOINED], true)) {
@@ -998,6 +1065,8 @@ class Manager {
 
 		$event = new RoomEvent($room);
 		$this->dispatcher->dispatch(Room::EVENT_AFTER_ROOM_CREATE, $event);
+		$event = new RoomCreatedEvent($room);
+		$this->dispatcher->dispatchTyped($event);
 
 		return $room;
 	}
@@ -1226,8 +1295,7 @@ class Manager {
 	}
 
 	/**
-	 * Returns whether the given user id is a guest user from
-	 * the guest app
+	 * Returns whether the given user id is a user created with the Guests app
 	 *
 	 * @param string $userId user id to check
 	 * @return bool true if the user is a guest, false otherwise

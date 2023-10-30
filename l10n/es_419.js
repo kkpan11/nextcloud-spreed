@@ -17,6 +17,8 @@ OC.L10N.register(
     "Invalid file provided" : "Archivo proporcionado inválido",
     "Invalid image" : "Imagen inválida",
     "Unknown filetype" : "Tipo de archivo desconocido",
+    "Accept" : "Aceptar",
+    "Decline" : "Declinar",
     "Join call" : "Unirse a la llamada",
     "A group call has started in {call}" : "Una llamada en grupo ha iniciado en {call}",
     "Open settings" : "Abrir configuraciones",
@@ -88,9 +90,9 @@ OC.L10N.register(
     "Devices" : "Dispositivos",
     "Upload" : "Cargar",
     "Files" : "Archivos",
-    "Dismiss" : "Descartar",
     "Reply" : "Responder",
     "Translate" : "Traducir",
+    "Dismiss" : "Descartar",
     "Contact" : "Contacto",
     "Today" : "Hoy",
     "Yesterday" : "Ayer",
@@ -98,7 +100,6 @@ OC.L10N.register(
     "Create new poll" : "Crear nueva encuesta",
     "Settings" : "Configuraciones ",
     "Create poll" : "Crear encuesta",
-    "Send" : "Enviar",
     "moderator" : "moderador",
     "Demote from moderator" : "Degradar de moderador",
     "Promote to moderator" : "Promover a moderador",
@@ -136,6 +137,7 @@ OC.L10N.register(
     "An external signaling server can optionally be used for larger installations. Leave empty to use the internal signaling server." : "Un servidor externo de señalización puede ser, opcionalmente, utilizado para instalaciones más grandes. Déjalo vacío para usar el sevidor de señalización interno. ",
     "Android app" : "Aplicación android",
     "iOS app" : "Aplicación iOS",
-    "More actions" : "Más acciones"
+    "More actions" : "Más acciones",
+    "Send" : "Enviar"
 },
 "nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;");

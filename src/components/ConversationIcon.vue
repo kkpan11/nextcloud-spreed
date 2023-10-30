@@ -20,8 +20,7 @@
 -->
 
 <template>
-	<div ref="conversation-icon"
-		class="conversation-icon"
+	<div class="conversation-icon"
 		:style="{'--icon-size': `${size}px`}"
 		:class="{'offline': offline}">
 		<div v-if="iconClass"
@@ -45,18 +44,15 @@
 			:disable-menu="disableMenu"
 			:display-name="item.displayName"
 			:preloaded-user-status="preloadedUserStatus"
-			:show-user-status="showUserStatus"
-			:show-user-status-compact="disableMenu"
+			:show-user-status="!hideUserStatus"
+			:show-user-status-compact="!showUserOnlineStatus"
 			:menu-container="menuContainer"
-			menu-position="left"
 			class="conversation-icon__avatar" />
-		<div v-if="showCall"
-			class="overlap-icon">
+		<div v-if="showCall" class="overlap-icon">
 			<VideoIcon :size="20" :fill-color="'#E9322D'" />
 			<span class="hidden-visually">{{ t('spreed', 'Call in progress') }}</span>
 		</div>
-		<div v-else-if="showFavorite"
-			class="overlap-icon">
+		<div v-else-if="showFavorite" class="overlap-icon">
 			<Star :size="20" :fill-color="'#FFCC00'" />
 			<span class="hidden-visually">{{ t('spreed', 'Favorite') }}</span>
 		</div>
@@ -72,7 +68,7 @@ import { generateOcsUrl } from '@nextcloud/router'
 
 import NcAvatar from '@nextcloud/vue/dist/Components/NcAvatar.js'
 
-import { CONVERSATION } from '../constants.js'
+import { AVATAR, CONVERSATION } from '../constants.js'
 import { isDarkTheme } from '../utils/isDarkTheme.js'
 
 const supportsAvatar = getCapabilities()?.spreed?.features?.includes('avatar')
@@ -102,12 +98,17 @@ export default {
 
 		disableMenu: {
 			type: Boolean,
+			default: true,
+		},
+
+		hideUserStatus: {
+			type: Boolean,
 			default: false,
 		},
 
-		showUserStatus: {
+		showUserOnlineStatus: {
 			type: Boolean,
-			default: true,
+			default: false,
 		},
 
 		item: {
@@ -130,20 +131,10 @@ export default {
 			default: false,
 		},
 
-		/**
-		 * Passing in true will make this component fill all the available space in its container.
-		 * This is not reactive as it will take the size of the container once mounted.
-		 */
-		isBig: {
-			type: Boolean,
-			default: false,
+		size: {
+			type: Number,
+			default: AVATAR.SIZE.DEFAULT,
 		},
-	},
-
-	data() {
-		return {
-			parentElement: undefined,
-		}
 	},
 
 	computed: {
@@ -156,7 +147,7 @@ export default {
 		},
 
 		preloadedUserStatus() {
-			if (this.showUserStatus && Object.prototype.hasOwnProperty.call(this.item, 'statusMessage')) {
+			if (!this.hideUserStatus && Object.prototype.hasOwnProperty.call(this.item, 'statusMessage')) {
 				// We preloaded the status
 				return {
 					status: this.item.status || null,
@@ -180,12 +171,14 @@ export default {
 			}
 
 			if (!supportsAvatar) {
-				if (this.item.objectType === 'file') {
+				if (this.item.objectType === CONVERSATION.OBJECT_TYPE.FILE) {
 					return 'icon-file'
-				} else if (this.item.objectType === 'share:password') {
+				} else if (this.item.objectType === CONVERSATION.OBJECT_TYPE.VIDEO_VERIFICATION) {
 					return 'icon-password'
-				} else if (this.item.objectType === 'emails') {
+				} else if (this.item.objectType === CONVERSATION.OBJECT_TYPE.EMAIL) {
 					return 'icon-mail'
+				} else if (this.item.objectType === CONVERSATION.OBJECT_TYPE.PHONE) {
+					return 'icon-phone'
 				} else if (this.item.type === CONVERSATION.TYPE.CHANGELOG) {
 					return 'icon-changelog'
 				} else if (this.item.type === CONVERSATION.TYPE.ONE_TO_ONE_FORMER) {
@@ -217,14 +210,6 @@ export default {
 			return undefined
 		},
 
-		size() {
-			if (this.isBig && this.parentElement) {
-				return Math.min(this.parentElement.clientHeight, this.parentElement.clientWidth)
-			} else {
-				return 44
-			}
-		},
-
 		isOneToOne() {
 			return this.item.type === CONVERSATION.TYPE.ONE_TO_ONE
 		},
@@ -242,27 +227,21 @@ export default {
 			})
 		},
 	},
-
-	mounted() {
-		// Get the size of the parent once the component is mounted
-		this.parentElement = this.$refs['conversation-icon'].parentElement
-	},
 }
 </script>
 
 <style lang="scss" scoped>
-$icon-size: var(--icon-size, 44px);
-
 .conversation-icon {
-	width: $icon-size;
-	height: $icon-size;
+	width: var(--icon-size);
+	height: var(--icon-size);
 	position: relative;
 
 	.avatar.icon {
-		width: $icon-size;
-		height: $icon-size;
-		line-height: $icon-size;
-		background-size: calc($icon-size / 2);
+		display: block;
+		width: var(--icon-size);
+		height: var(--icon-size);
+		line-height: var(--icon-size);
+		background-size: calc(var(--icon-size) / 2);
 		background-color: var(--color-background-darker);
 
 		&.icon-changelog {
@@ -273,7 +252,7 @@ $icon-size: var(--icon-size, 44px);
 	.overlap-icon {
 		position: absolute;
 		top: 0;
-		left: calc(#{$icon-size} - 12px);
+		left: calc(var(--icon-size) - 12px);
 		line-height: 100%;
 		display: inline-block;
 		vertical-align: middle;

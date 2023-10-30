@@ -1,43 +1,111 @@
 import { setActivePinia, createPinia } from 'pinia'
 
+import { loadState } from '@nextcloud/initial-state'
+
 import { PRIVACY } from '../../constants.js'
+import BrowserStorage from '../../services/BrowserStorage.js'
+import { setReadStatusPrivacy, setTypingStatusPrivacy } from '../../services/settingsService.js'
+import { generateOCSResponse } from '../../test-helpers.js'
 import { useSettingsStore } from '../settings.js'
 
-jest.mock('@nextcloud/initial-state',
-	() => ({
-		loadState: jest.fn().mockReturnValue(0),
-	}))
+jest.mock('../../services/settingsService', () => ({
+	setReadStatusPrivacy: jest.fn(),
+	setTypingStatusPrivacy: jest.fn(),
+}))
 
-jest.mock('../../services/settingsService',
-	() => ({
-		setReadStatusPrivacy: jest.fn().mockReturnValue('success'),
-		setTypingStatusPrivacy: jest.fn().mockReturnValue('success'),
-	}))
+jest.mock('../../services/BrowserStorage.js', () => ({
+	getItem: jest.fn(),
+	setItem: jest.fn(),
+}))
 
 describe('settingsStore', () => {
+	let settingsStore
+
 	beforeEach(() => {
-		// creates a fresh pinia and make it active, so it's automatically picked
-		// up by any useStore() call without having to pass it to it:
-		// `useStore(pinia)`
+		loadState.mockImplementation(() => PRIVACY.PUBLIC)
 		setActivePinia(createPinia())
+		settingsStore = useSettingsStore()
 	})
 
-	it('shows correct loaded values for statuses', () => {
-		const settingsStore = useSettingsStore()
-
-		expect(settingsStore.readStatusPrivacy).toBe(PRIVACY.PUBLIC)
-		expect(settingsStore.typingStatusPrivacy).toBe(PRIVACY.PUBLIC)
+	afterEach(async () => {
+		jest.clearAllMocks()
 	})
 
-	it('toggles statuses correctly', async () => {
-		const settingsStore = useSettingsStore()
+	describe('reading and typing statuses', () => {
+		it('shows correct loaded values for statuses', () => {
+			// Assert
+			expect(settingsStore.readStatusPrivacy).toBe(PRIVACY.PUBLIC)
+			expect(settingsStore.typingStatusPrivacy).toBe(PRIVACY.PUBLIC)
+		})
 
-		expect(settingsStore.readStatusPrivacy).toBe(PRIVACY.PUBLIC)
-		await settingsStore.updateReadStatusPrivacy(PRIVACY.PRIVATE)
-		expect(settingsStore.readStatusPrivacy).toBe(PRIVACY.PRIVATE)
+		it('updates statuses correctly', async () => {
+			// Arrange
+			const response = generateOCSResponse({ payload: [] })
+			setReadStatusPrivacy.mockResolvedValueOnce(response)
+			setTypingStatusPrivacy.mockResolvedValueOnce(response)
 
-		expect(settingsStore.typingStatusPrivacy).toBe(PRIVACY.PUBLIC)
-		await settingsStore.updateTypingStatusPrivacy(PRIVACY.PRIVATE)
-		expect(settingsStore.typingStatusPrivacy).toBe(PRIVACY.PRIVATE)
+			// Act: update read status and typing status privacy
+			await settingsStore.updateReadStatusPrivacy(PRIVACY.PRIVATE)
+			await settingsStore.updateTypingStatusPrivacy(PRIVACY.PRIVATE)
+
+			// Assert
+			expect(settingsStore.readStatusPrivacy).toBe(PRIVACY.PRIVATE)
+			expect(settingsStore.typingStatusPrivacy).toBe(PRIVACY.PRIVATE)
+		})
+	})
+
+	describe('media settings dialog', () => {
+		it('shows correct stored values for conversations', () => {
+			// Arrange
+			settingsStore.showMediaSettings['token-1'] = true
+			settingsStore.showMediaSettings['token-2'] = false
+
+			// Act
+			const results = [settingsStore.getShowMediaSettings('token-1'),
+				settingsStore.getShowMediaSettings('token-2')]
+
+			// Assert
+			expect(results).toEqual([true, false])
+			expect(BrowserStorage.getItem).not.toHaveBeenCalled()
+		})
+
+		it('shows correct values received from BrowserStorage', () => {
+			// Arrange
+			BrowserStorage.getItem
+				.mockReturnValueOnce(null)
+				.mockReturnValueOnce('true')
+				.mockReturnValueOnce('false')
+
+			// Act
+			const results = [settingsStore.getShowMediaSettings('token-1'),
+				settingsStore.getShowMediaSettings('token-2'),
+				settingsStore.getShowMediaSettings('token-3'),]
+
+			// Assert
+			expect(results).toEqual([true, true, false])
+			expect(BrowserStorage.getItem).toHaveBeenCalledTimes(3)
+			expect(BrowserStorage.getItem).toHaveBeenNthCalledWith(1, 'showMediaSettings_token-1')
+			expect(BrowserStorage.getItem).toHaveBeenNthCalledWith(2, 'showMediaSettings_token-2')
+			expect(BrowserStorage.getItem).toHaveBeenNthCalledWith(3, 'showMediaSettings_token-3')
+		})
+
+		it('updates values correctly', async () => {
+			// Arrange
+			settingsStore.showMediaSettings['token-1'] = true
+			settingsStore.showMediaSettings['token-2'] = false
+
+			// Act
+			settingsStore.setShowMediaSettings('token-1', false)
+			settingsStore.setShowMediaSettings('token-2', true)
+			const results = [settingsStore.getShowMediaSettings('token-1'),
+				settingsStore.getShowMediaSettings('token-2')]
+
+			// Assert
+			expect(results).toEqual([false, true])
+			expect(BrowserStorage.getItem).not.toHaveBeenCalled()
+			expect(BrowserStorage.setItem).toHaveBeenCalledTimes(2)
+			expect(BrowserStorage.setItem).toHaveBeenNthCalledWith(1, 'showMediaSettings_token-1', 'false')
+			expect(BrowserStorage.setItem).toHaveBeenNthCalledWith(2, 'showMediaSettings_token-2', 'true')
+		})
 	})
 })

@@ -23,6 +23,8 @@
     "Invalid image" : "Imagem inválida",
     "Unknown filetype" : "Tipo de ficheiro desconhecido",
     "Dismiss notification" : "Dispensar notificação",
+    "Accept" : "Aceitar",
+    "Decline" : "Recusar",
     "Join call" : "Juntar-se à chamada",
     "A group call has started in {call}" : "Uma chamada de grupo começou em {call}",
     "Open settings" : "Abrir definições",
@@ -279,9 +281,9 @@
     "Close" : "Fechar",
     "Upload" : "Enviar",
     "Files" : "Ficheiros",
-    "Dismiss" : "Dispensar",
     "Reply" : "Resposta",
     "Translate" : "Traduzir",
+    "Dismiss" : "Dispensar",
     "Contact" : "Contacto",
     "No messages" : "Sem mensagens",
     "Today" : "Hoje",
@@ -291,7 +293,6 @@
     "Group" : "Grupo",
     "New file" : "Ficheiro novo",
     "Settings" : "Definições",
-    "Send" : "Enviar",
     "Join" : "Aderir",
     "moderator" : "moderador",
     "guest" : "convidado",
@@ -321,9 +322,9 @@
     "Locations" : "Localizações",
     "Audio" : "Áudio",
     "Other" : "Outro",
+    "Error while sharing file" : "Erro ao partilhar ficheiro",
     "Do not disturb" : "Não incomodar",
     "Away" : "Ausente",
-    "Error while sharing file" : "Erro ao partilhar ficheiro",
     "Default" : "Predefinida",
     "Access to microphone & camera is only possible with HTTPS" : "Só é possível aceder ao microfone & câmera com HTTPS",
     "Access to microphone & camera was denied" : "Acesso recusado ao microfone & câmera",
@@ -336,6 +337,7 @@
     "Welcome to Nextcloud Talk!\nIn this conversation you will be informed about new features available in Nextcloud Talk." : "Bem-vindo ao Nextcloud Talk!\nNesta conversa será informado sobre novas funcionalidades disponíveis no Nextcloud Talk.",
     "More actions" : "Mais acções",
     "Conversation name" : "Nome da conversação",
-    "Rename conversation" : "Renomear conversação"
+    "Rename conversation" : "Renomear conversação",
+    "Send" : "Enviar"
 },"pluralForm" :"nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;"
 }

@@ -58,6 +58,7 @@ class SelectHelper {
 			->addSelect($alias . 'breakout_room_mode')
 			->addSelect($alias . 'breakout_room_status')
 			->addSelect($alias . 'call_recording')
+			->addSelect($alias . 'recording_consent')
 			->selectAlias($alias . 'id', 'r_id');
 	}
 
@@ -83,6 +84,8 @@ class SelectHelper {
 			->addSelect($alias . 'permissions')
 			->addSelect($alias . 'access_token')
 			->addSelect($alias . 'remote_id')
+			->addSelect($alias . 'phone_number')
+			->addSelect($alias . 'call_id')
 			->selectAlias($alias . 'id', 'a_id');
 	}
 

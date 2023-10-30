@@ -29,27 +29,49 @@ use OCA\Circles\Model\Member;
 use OCA\Talk\Chat\ChatManager;
 use OCA\Talk\Config;
 use OCA\Talk\Events\AddParticipantsEvent;
+use OCA\Talk\Events\AParticipantModifiedEvent;
+use OCA\Talk\Events\AttendeeRemovedEvent;
 use OCA\Talk\Events\AttendeesAddedEvent;
 use OCA\Talk\Events\AttendeesRemovedEvent;
+use OCA\Talk\Events\BeforeAttendeeRemovedEvent;
+use OCA\Talk\Events\BeforeAttendeesAddedEvent;
+use OCA\Talk\Events\BeforeCallEndedForEveryoneEvent;
+use OCA\Talk\Events\BeforeFederatedUserJoinedRoomEvent;
+use OCA\Talk\Events\BeforeGuestJoinedRoomEvent;
+use OCA\Talk\Events\BeforeGuestsCleanedUpEvent;
+use OCA\Talk\Events\BeforeParticipantModifiedEvent;
+use OCA\Talk\Events\BeforeSessionLeftRoomEvent;
+use OCA\Talk\Events\BeforeUserJoinedRoomEvent;
+use OCA\Talk\Events\CallEndedForEveryoneEvent;
+use OCA\Talk\Events\CallNotificationSendEvent;
 use OCA\Talk\Events\ChatEvent;
 use OCA\Talk\Events\DuplicatedParticipantEvent;
 use OCA\Talk\Events\EndCallForEveryoneEvent;
+use OCA\Talk\Events\FederatedUserJoinedRoomEvent;
+use OCA\Talk\Events\GuestJoinedRoomEvent;
+use OCA\Talk\Events\GuestsCleanedUpEvent;
 use OCA\Talk\Events\JoinRoomGuestEvent;
 use OCA\Talk\Events\JoinRoomUserEvent;
 use OCA\Talk\Events\ModifyEveryoneEvent;
 use OCA\Talk\Events\ModifyParticipantEvent;
 use OCA\Talk\Events\ParticipantEvent;
+use OCA\Talk\Events\ParticipantModifiedEvent;
 use OCA\Talk\Events\RemoveParticipantEvent;
 use OCA\Talk\Events\RemoveUserEvent;
 use OCA\Talk\Events\RoomEvent;
 use OCA\Talk\Events\SendCallNotificationEvent;
+use OCA\Talk\Events\SessionLeftRoomEvent;
 use OCA\Talk\Events\SilentModifyParticipantEvent;
+use OCA\Talk\Events\SystemMessagesMultipleSentEvent;
+use OCA\Talk\Events\UserJoinedRoomEvent;
+use OCA\Talk\Exceptions\CannotReachRemoteException;
+use OCA\Talk\Exceptions\DialOutFailedException;
 use OCA\Talk\Exceptions\ForbiddenException;
 use OCA\Talk\Exceptions\InvalidPasswordException;
 use OCA\Talk\Exceptions\ParticipantNotFoundException;
 use OCA\Talk\Exceptions\UnauthorizedException;
+use OCA\Talk\Federation\BackendNotifier;
 use OCA\Talk\Federation\FederationManager;
-use OCA\Talk\Federation\Notifications;
 use OCA\Talk\Manager;
 use OCA\Talk\Model\Attendee;
 use OCA\Talk\Model\AttendeeMapper;
@@ -61,6 +83,7 @@ use OCA\Talk\Participant;
 use OCA\Talk\Room;
 use OCA\Talk\Webinary;
 use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\AppFramework\Db\MultipleObjectsReturnedException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Comments\IComment;
 use OCP\DB\Exception;
@@ -78,7 +101,9 @@ use OCP\Server;
 
 class ParticipantService {
 
-	protected array $userCache;
+	/** @var array<int, array<string, array<string, Participant>>> */
+	protected array $actorCache;
+	/** @var array<int, array<string, Participant>> */
 	protected array $sessionCache;
 
 	public function __construct(
@@ -93,7 +118,7 @@ class ParticipantService {
 		private IUserManager $userManager,
 		private IGroupManager $groupManager,
 		private MembershipService $membershipService,
-		private Notifications $notifications,
+		private BackendNotifier $backendNotifier,
 		private ITimeFactory $timeFactory,
 		private ICacheFactory $cacheFactory,
 	) {
@@ -112,6 +137,8 @@ class ParticipantService {
 			return;
 		}
 
+		$event = new BeforeParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_TYPE, $participantType, $oldType);
+		$this->dispatcher->dispatchTyped($event);
 		$event = new ModifyParticipantEvent($room, $participant, 'type', $participantType, $oldType);
 		$this->dispatcher->dispatch(Room::EVENT_BEFORE_PARTICIPANT_TYPE_SET, $event);
 
@@ -174,6 +201,8 @@ class ParticipantService {
 		}
 
 		$this->dispatcher->dispatch(Room::EVENT_AFTER_PARTICIPANT_TYPE_SET, $event);
+		$event = new ParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_TYPE, $participantType, $oldType);
+		$this->dispatcher->dispatchTyped($event);
 	}
 
 	/**
@@ -210,6 +239,8 @@ class ParticipantService {
 			return false;
 		}
 
+		$event = new BeforeParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_PERMISSIONS, $newPermissions, $oldPermissions);
+		$this->dispatcher->dispatchTyped($event);
 		$event = new ModifyParticipantEvent($room, $participant, 'permissions', $newPermissions, $oldPermissions);
 		$this->dispatcher->dispatch(Room::EVENT_BEFORE_PARTICIPANT_PERMISSIONS_SET, $event);
 
@@ -220,6 +251,8 @@ class ParticipantService {
 		$this->attendeeMapper->update($attendee);
 
 		$this->dispatcher->dispatch(Room::EVENT_AFTER_PARTICIPANT_PERMISSIONS_SET, $event);
+		$event = new ParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_PERMISSIONS, $newPermissions, $oldPermissions);
+		$this->dispatcher->dispatchTyped($event);
 
 		return true;
 	}
@@ -287,10 +320,13 @@ class ParticipantService {
 	 * @throws UnauthorizedException
 	 */
 	public function joinRoom(RoomService $roomService, Room $room, IUser $user, string $password, bool $passedPasswordProtection = false): Participant {
-		$event = new JoinRoomUserEvent($room, $user, $password, $passedPasswordProtection);
-		$this->dispatcher->dispatch(Room::EVENT_BEFORE_ROOM_CONNECT, $event);
+		$event = new BeforeUserJoinedRoomEvent($room, $user, $password, $passedPasswordProtection);
+		$this->dispatcher->dispatchTyped($event);
+		$legacyEvent = new JoinRoomUserEvent($room, $user, $password, $event->getPassedPasswordProtection());
+		$legacyEvent->setCancelJoin($event->getCancelJoin());
+		$this->dispatcher->dispatch(Room::EVENT_BEFORE_ROOM_CONNECT, $legacyEvent);
 
-		if ($event->getCancelJoin() === true) {
+		if ($legacyEvent->getCancelJoin() === true) {
 			$this->removeUser($room, $user, Room::PARTICIPANT_LEFT);
 			throw new UnauthorizedException('Participant is not allowed to join');
 		}
@@ -302,7 +338,7 @@ class ParticipantService {
 			$manager = Server::get(Manager::class);
 			$isListableByUser = $manager->isRoomListableByUser($room, $user->getUID());
 
-			if (!$isListableByUser && !$event->getPassedPasswordProtection() && !$roomService->verifyPassword($room, $password)['result']) {
+			if (!$isListableByUser && !$legacyEvent->getPassedPasswordProtection() && !$roomService->verifyPassword($room, $password)['result']) {
 				throw new InvalidPasswordException('Provided password is invalid');
 			}
 
@@ -332,8 +368,38 @@ class ParticipantService {
 		}
 
 		$session = $this->sessionService->createSessionForAttendee($attendee);
+		$participant = new Participant($room, $attendee, $session);
 
-		$this->dispatcher->dispatch(Room::EVENT_AFTER_ROOM_CONNECT, $event);
+		$this->dispatcher->dispatch(Room::EVENT_AFTER_ROOM_CONNECT, $legacyEvent);
+		$event = new UserJoinedRoomEvent($room, $user, $participant);
+		$this->dispatcher->dispatchTyped($event);
+
+		return $participant;
+	}
+
+	/**
+	 * @throws UnauthorizedException
+	 */
+	public function joinRoomAsFederatedUser(Room $room, string $actorType, string $actorId): Participant {
+		$event = new BeforeFederatedUserJoinedRoomEvent($room, $actorId);
+		$this->dispatcher->dispatchTyped($event);
+
+		if ($event->isJoinCanceled()) {
+			throw new UnauthorizedException('Participant is not allowed to join');
+		}
+
+		try {
+			$participant = $this->getParticipantByActor($room, $actorType, $actorId);
+			$attendee = $participant->getAttendee();
+		} catch (ParticipantNotFoundException $e) {
+			// shouldn't happen unless some code called joinRoom without previous checks
+			throw new UnauthorizedException('Participant is not allowed to join');
+		}
+
+		$session = $this->sessionService->createSessionForAttendee($attendee);
+
+		$event = new FederatedUserJoinedRoomEvent($room, $actorId);
+		$this->dispatcher->dispatchTyped($event);
 
 		return new Participant($room, $attendee, $session);
 	}
@@ -349,14 +415,17 @@ class ParticipantService {
 	 * @throws UnauthorizedException
 	 */
 	public function joinRoomAsNewGuest(RoomService $roomService, Room $room, string $password, bool $passedPasswordProtection = false, ?Participant $previousParticipant = null): Participant {
-		$event = new JoinRoomGuestEvent($room, $password, $passedPasswordProtection);
-		$this->dispatcher->dispatch(Room::EVENT_BEFORE_GUEST_CONNECT, $event);
+		$event = new BeforeGuestJoinedRoomEvent($room, $password, $passedPasswordProtection);
+		$this->dispatcher->dispatchTyped($event);
+		$legacyEvent = new JoinRoomGuestEvent($room, $password, $event->getPassedPasswordProtection());
+		$legacyEvent->setCancelJoin($event->getCancelJoin());
+		$this->dispatcher->dispatch(Room::EVENT_BEFORE_GUEST_CONNECT, $legacyEvent);
 
-		if ($event->getCancelJoin()) {
+		if ($legacyEvent->getCancelJoin()) {
 			throw new UnauthorizedException('Participant is not allowed to join');
 		}
 
-		if (!$event->getPassedPasswordProtection() && !$roomService->verifyPassword($room, $password)['result']) {
+		if (!$legacyEvent->getPassedPasswordProtection() && !$roomService->verifyPassword($room, $password)['result']) {
 			throw new InvalidPasswordException();
 		}
 
@@ -391,15 +460,20 @@ class ParticipantService {
 			$this->attendeeMapper->update($attendee);
 		}
 
-		$this->dispatcher->dispatch(Room::EVENT_AFTER_GUEST_CONNECT, $event);
+		$participant = new Participant($room, $attendee, $session);
 
-		return new Participant($room, $attendee, $session);
+		$this->dispatcher->dispatch(Room::EVENT_AFTER_GUEST_CONNECT, $legacyEvent);
+		$event = new GuestJoinedRoomEvent($room, $participant);
+		$this->dispatcher->dispatchTyped($event);
+
+		return $participant;
 	}
 
 	/**
 	 * @param Room $room
 	 * @param array $participants
 	 * @param IUser|null $addedBy User that is attempting to add these users (must be set for federated users to be added)
+	 * @throws CannotReachRemoteException thrown when sending the federation request didn't work
 	 * @throws \Exception thrown if $addedBy is not set when adding a federated user
 	 */
 	public function addUsers(Room $room, array $participants, ?IUser $addedBy = null): void {
@@ -442,16 +516,29 @@ class ParticipantService {
 			if (isset($participant['remoteId'])) {
 				$attendee->setRemoteId($participant['remoteId']);
 			}
+			if (isset($participant['phoneNumber'])) {
+				$attendee->setPhoneNumber($participant['phoneNumber']);
+			}
 			$attendee->setParticipantType($participant['participantType'] ?? Participant::USER);
 			$attendee->setPermissions(Attendee::PERMISSIONS_DEFAULT);
 			$attendee->setLastReadMessage($lastMessage);
 			$attendee->setReadPrivacy($readPrivacy);
+			$attendees[] = $attendee;
+		}
+
+		$attendeeEvent = new BeforeAttendeesAddedEvent($room, $attendees);
+		$this->dispatcher->dispatchTyped($attendeeEvent);
+
+		foreach ($attendees as $attendee) {
 			try {
-				$entity = $this->attendeeMapper->insert($attendee);
-				$attendees[] = $attendee;
+				$this->attendeeMapper->insert($attendee);
 
 				if ($attendee->getActorType() === Attendee::ACTOR_FEDERATED_USERS) {
-					$this->notifications->sendRemoteShare((string) $entity->getId(), $participant['accessToken'], $participant['actorId'], $addedBy->getDisplayName(), $addedBy->getCloudId(), 'user', $room, $this->getHighestPermissionAttendee($room));
+					$inviteSent = $this->backendNotifier->sendRemoteShare((string) $attendee->getId(), $attendee->getAccessToken(), $attendee->getActorId(), $addedBy->getDisplayName(), $addedBy->getCloudId(), 'user', $room, $this->getHighestPermissionAttendee($room));
+					if (!$inviteSent) {
+						$this->attendeeMapper->delete($attendee);
+						throw new CannotReachRemoteException();
+					}
 				}
 			} catch (Exception $e) {
 				if ($e->getReason() !== Exception::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
@@ -460,16 +547,17 @@ class ParticipantService {
 			}
 		}
 
-		if (!empty($attendees)) {
-			$attendeeEvent = new AttendeesAddedEvent($room, $attendees);
-			$this->dispatcher->dispatchTyped($attendeeEvent);
+		$attendeeEvent = new AttendeesAddedEvent($room, $attendees, true);
+		$this->dispatcher->dispatchTyped($attendeeEvent);
+		if ($attendeeEvent->getLastMessage()) {
+			$event->setLastMessage($attendeeEvent->getLastMessage());
+		}
 
-			$this->dispatcher->dispatch(Room::EVENT_AFTER_USERS_ADD, $event);
+		$this->dispatcher->dispatch(Room::EVENT_AFTER_USERS_ADD, $event);
 
-			$lastMessage = $event->getLastMessage();
-			if ($lastMessage instanceof IComment) {
-				$this->updateRoomLastMessage($room, $lastMessage);
-			}
+		$lastMessage = $event->getLastMessage();
+		if ($lastMessage instanceof IComment) {
+			$this->updateRoomLastMessage($room, $lastMessage);
 		}
 	}
 
@@ -485,6 +573,8 @@ class ParticipantService {
 
 		$event = new ChatEvent($room, $message);
 		$this->dispatcher->dispatch(ChatManager::EVENT_AFTER_MULTIPLE_SYSTEM_MESSAGE_SEND, $event);
+		$event = new SystemMessagesMultipleSentEvent($room, $message);
+		$this->dispatcher->dispatchTyped($event);
 	}
 
 	public function getHighestPermissionAttendee(Room $room): ?Attendee {
@@ -736,6 +826,8 @@ class ParticipantService {
 	}
 
 	public function leaveRoomAsSession(Room $room, Participant $participant, bool $duplicatedParticipant = false): void {
+		$event = new BeforeSessionLeftRoomEvent($room, $participant, $duplicatedParticipant);
+		$this->dispatcher->dispatchTyped($event);
 		if ($duplicatedParticipant) {
 			$event = new DuplicatedParticipantEvent($room, $participant);
 		} else {
@@ -756,6 +848,8 @@ class ParticipantService {
 		}
 
 		$this->dispatcher->dispatch(Room::EVENT_AFTER_ROOM_DISCONNECT, $event);
+		$event = new SessionLeftRoomEvent($room, $participant, $duplicatedParticipant);
+		$this->dispatcher->dispatchTyped($event);
 
 		if ($participant->getAttendee()->getParticipantType() === Participant::USER_SELF_JOINED
 			&& empty($this->sessionMapper->findByAttendeeId($participant->getAttendee()->getId()))) {
@@ -781,6 +875,9 @@ class ParticipantService {
 			);
 		}
 
+		$event = new BeforeAttendeeRemovedEvent($room, $participant->getAttendee(), $reason, $sessions);
+		$this->dispatcher->dispatchTyped($event);
+
 		if ($isUser) {
 			$user = $this->userManager->get($participant->getAttendee()->getActorId());
 			$event = new RemoveUserEvent($room, $participant, $user, $reason, $sessions);
@@ -793,15 +890,17 @@ class ParticipantService {
 		$this->sessionMapper->deleteByAttendeeId($participant->getAttendee()->getId());
 		$this->attendeeMapper->delete($participant->getAttendee());
 
-		if (!$attendeeEventIsTriggeredAlready) {
-			$attendeeEvent = new AttendeesRemovedEvent($room, [$participant->getAttendee()]);
-			$this->dispatcher->dispatchTyped($attendeeEvent);
-		}
-
 		if ($isUser) {
 			$this->dispatcher->dispatch(Room::EVENT_AFTER_USER_REMOVE, $event);
 		} else {
 			$this->dispatcher->dispatch(Room::EVENT_AFTER_PARTICIPANT_REMOVE, $event);
+		}
+		$event = new AttendeeRemovedEvent($room, $participant->getAttendee(), $reason, $sessions);
+		$this->dispatcher->dispatchTyped($event);
+
+		if (!$attendeeEventIsTriggeredAlready) {
+			$attendeeEvent = new AttendeesRemovedEvent($room, [$participant->getAttendee()]);
+			$this->dispatcher->dispatchTyped($attendeeEvent);
 		}
 
 		if ($participant->getAttendee()->getActorType() === Attendee::ACTOR_GROUPS) {
@@ -811,6 +910,9 @@ class ParticipantService {
 		}
 	}
 
+	/**
+	 * @return Attendee[]
+	 */
 	public function getActorsByType(Room $room, string $actorType): array {
 		return $this->attendeeMapper->getActorsByType($room->getId(), $actorType);
 	}
@@ -927,6 +1029,9 @@ class ParticipantService {
 			$reason = Room::PARTICIPANT_REMOVED;
 		}
 
+		$attendeeEvent = new BeforeAttendeeRemovedEvent($room, $attendee, $reason, $sessions);
+		$this->dispatcher->dispatchTyped($attendeeEvent);
+
 		$event = new RemoveUserEvent($room, $participant, $user, $reason, $sessions);
 		$this->dispatcher->dispatch(Room::EVENT_BEFORE_USER_REMOVE, $event);
 
@@ -936,6 +1041,9 @@ class ParticipantService {
 
 		$this->attendeeMapper->delete($attendee);
 
+		$attendeeEvent = new AttendeeRemovedEvent($room, $attendee, $reason, $sessions);
+		$this->dispatcher->dispatchTyped($attendeeEvent);
+
 		$attendeeEvent = new AttendeesRemovedEvent($room, [$attendee]);
 		$this->dispatcher->dispatchTyped($attendeeEvent);
 
@@ -943,6 +1051,8 @@ class ParticipantService {
 	}
 
 	public function cleanGuestParticipants(Room $room): void {
+		$event = new BeforeGuestsCleanedUpEvent($room);
+		$this->dispatcher->dispatchTyped($event);
 		$event = new RoomEvent($room);
 		$this->dispatcher->dispatch(Room::EVENT_BEFORE_GUESTS_CLEAN, $event);
 
@@ -1004,9 +1114,13 @@ class ParticipantService {
 		$this->dispatcher->dispatchTyped($attendeeEvent);
 
 		$this->dispatcher->dispatch(Room::EVENT_AFTER_GUESTS_CLEAN, $event);
+		$event = new GuestsCleanedUpEvent($room);
+		$this->dispatcher->dispatchTyped($event);
 	}
 
 	public function endCallForEveryone(Room $room, Participant $moderator): void {
+		$event = new BeforeCallEndedForEveryoneEvent($room, $moderator);
+		$this->dispatcher->dispatchTyped($event);
 		$event = new EndCallForEveryoneEvent($room, $moderator);
 		$this->dispatcher->dispatch(Room::EVENT_BEFORE_END_CALL_FOR_EVERYONE, $event);
 
@@ -1029,12 +1143,18 @@ class ParticipantService {
 		$event->setUserIds($changedUserIds);
 
 		$this->dispatcher->dispatch(Room::EVENT_AFTER_END_CALL_FOR_EVERYONE, $event);
+		$event = new CallEndedForEveryoneEvent($room, $moderator, $changedSessionIds, $changedUserIds);
+		$this->dispatcher->dispatchTyped($event);
 	}
 
-	public function changeInCall(Room $room, Participant $participant, int $flags, bool $endCallForEveryone = false, bool $silent = false): void {
+	public function changeInCall(Room $room, Participant $participant, int $flags, bool $endCallForEveryone = false, bool $silent = false): bool {
+		if ($room->getType() === Room::TYPE_CHANGELOG || $room->getType() === Room::TYPE_NOTE_TO_SELF) {
+			return false;
+		}
+
 		$session = $participant->getSession();
 		if (!$session instanceof Session) {
-			return;
+			return false;
 		}
 
 		$permissions = $participant->getPermissions();
@@ -1045,38 +1165,53 @@ class ParticipantService {
 			$flags &= ~Participant::FLAG_WITH_VIDEO;
 		}
 
+		$oldFlags = $session->getInCall();
+		$details = [];
+
 		if ($flags !== Participant::FLAG_DISCONNECTED) {
 			if ($silent) {
-				$event = new SilentModifyParticipantEvent($room, $participant, 'inCall', $flags, $session->getInCall());
+				$legacyEvent = new SilentModifyParticipantEvent($room, $participant, 'inCall', $flags, $session->getInCall());
+				$details = [AParticipantModifiedEvent::DETAIL_IN_CALL_SILENT => $silent];
 			} else {
-				$event = new ModifyParticipantEvent($room, $participant, 'inCall', $flags, $session->getInCall());
+				$legacyEvent = new ModifyParticipantEvent($room, $participant, 'inCall', $flags, $session->getInCall());
 			}
-			$this->dispatcher->dispatch(Room::EVENT_BEFORE_SESSION_JOIN_CALL, $event);
+			$this->dispatcher->dispatch(Room::EVENT_BEFORE_SESSION_JOIN_CALL, $legacyEvent);
 		} else {
 			if ($endCallForEveryone) {
-				$event = new ModifyEveryoneEvent($room, $participant, 'inCall', $flags, $session->getInCall());
+				$legacyEvent = new ModifyEveryoneEvent($room, $participant, 'inCall', $flags, $session->getInCall());
+				$details = [AParticipantModifiedEvent::DETAIL_IN_CALL_END_FOR_EVERYONE => $endCallForEveryone];
 			} else {
-				$event = new ModifyParticipantEvent($room, $participant, 'inCall', $flags, $session->getInCall());
+				$legacyEvent = new ModifyParticipantEvent($room, $participant, 'inCall', $flags, $session->getInCall());
 			}
-			$this->dispatcher->dispatch(Room::EVENT_BEFORE_SESSION_LEAVE_CALL, $event);
+			$this->dispatcher->dispatch(Room::EVENT_BEFORE_SESSION_LEAVE_CALL, $legacyEvent);
 		}
+
+		$event = new BeforeParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_IN_CALL, $flags, $oldFlags, $details);
+		$this->dispatcher->dispatchTyped($event);
 
 		$session->setInCall($flags);
 		if (!$endCallForEveryone) {
 			$this->sessionMapper->update($session);
 		}
 
+		$attendee = $participant->getAttendee();
 		if ($flags !== Participant::FLAG_DISCONNECTED) {
-			$attendee = $participant->getAttendee();
 			$attendee->setLastJoinedCall($this->timeFactory->getTime());
+			$this->attendeeMapper->update($attendee);
+		} elseif ($attendee->getActorType() === Attendee::ACTOR_PHONES) {
+			$attendee->setCallId('');
 			$this->attendeeMapper->update($attendee);
 		}
 
 		if ($flags !== Participant::FLAG_DISCONNECTED) {
-			$this->dispatcher->dispatch(Room::EVENT_AFTER_SESSION_JOIN_CALL, $event);
+			$this->dispatcher->dispatch(Room::EVENT_AFTER_SESSION_JOIN_CALL, $legacyEvent);
 		} else {
-			$this->dispatcher->dispatch(Room::EVENT_AFTER_SESSION_LEAVE_CALL, $event);
+			$this->dispatcher->dispatch(Room::EVENT_AFTER_SESSION_LEAVE_CALL, $legacyEvent);
 		}
+		$event = new ParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_IN_CALL, $flags, $oldFlags, $details);
+		$this->dispatcher->dispatchTyped($event);
+
+		return true;
 	}
 
 	public function sendCallNotificationForAttendee(Room $room, Participant $currentParticipant, int $targetAttendeeId): bool {
@@ -1092,13 +1227,81 @@ class ParticipantService {
 			}
 		}
 
+		$target = new Participant($room, $attendee, null);
 		$this->dispatcher->dispatchTyped(new SendCallNotificationEvent(
 			$room,
 			$currentParticipant,
-			new Participant($room, $attendee, null)
+			$target
 		));
+		$event = new CallNotificationSendEvent($room, $currentParticipant, $target);
+		$this->dispatcher->dispatchTyped($event);
 
 		return true;
+	}
+
+	/**
+	 * @throws \InvalidArgumentException
+	 * @throws DialOutFailedException
+	 * @throws ParticipantNotFoundException
+	 */
+	public function startDialOutRequest(SIPDialOutService $dialOutService, Room $room, int $targetAttendeeId): void {
+		try {
+			$attendee = $this->attendeeMapper->getById($targetAttendeeId);
+		} catch (DoesNotExistException|MultipleObjectsReturnedException|Exception) {
+			throw new ParticipantNotFoundException();
+		}
+
+		if ($attendee->getRoomId() !== $room->getId()) {
+			throw new ParticipantNotFoundException();
+		}
+
+		if ($attendee->getActorType() !== Attendee::ACTOR_PHONES) {
+			throw new ParticipantNotFoundException();
+		}
+
+		$dialOutResponse = $dialOutService->sendDialOutRequestToBackend($room, $attendee);
+
+		if (!$dialOutResponse) {
+			throw new \InvalidArgumentException('backend');
+		}
+
+		if ($dialOutResponse->dialOut->error->message) {
+			throw new DialOutFailedException(
+				$dialOutResponse->dialOut->error->code,
+				$dialOutResponse->dialOut->error->message,
+			);
+		}
+
+		$attendee->setCallId($dialOutResponse->dialOut->callId);
+		$this->attendeeMapper->update($attendee);
+	}
+
+	/**
+	 * @throws \InvalidArgumentException
+	 * @throws ParticipantNotFoundException
+	 */
+	public function resetDialOutRequest(Room $room, int $targetAttendeeId, string $callId): void {
+		try {
+			$attendee = $this->attendeeMapper->getById($targetAttendeeId);
+		} catch (DoesNotExistException|MultipleObjectsReturnedException|Exception) {
+			throw new ParticipantNotFoundException();
+		}
+
+		if ($attendee->getRoomId() !== $room->getId()) {
+			throw new ParticipantNotFoundException();
+		}
+
+		if ($attendee->getActorType() !== Attendee::ACTOR_PHONES) {
+			throw new ParticipantNotFoundException();
+		}
+
+		if ($callId === $attendee->getCallId()) {
+			$attendee->setCallId(null);
+			$this->attendeeMapper->update($attendee);
+		} else {
+			throw new \InvalidArgumentException('callId');
+		}
+
 	}
 
 	public function updateCallFlags(Room $room, Participant $participant, int $flags): void {
@@ -1123,6 +1326,9 @@ class ParticipantService {
 			$flags &= ~Participant::FLAG_WITH_VIDEO;
 		}
 
+		$oldFlags = $session->getInCall();
+		$event = new BeforeParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_IN_CALL, $flags, $oldFlags);
+		$this->dispatcher->dispatchTyped($event);
 		$event = new ModifyParticipantEvent($room, $participant, 'inCall', $flags, $session->getInCall());
 		$this->dispatcher->dispatch(Room::EVENT_BEFORE_SESSION_UPDATE_CALL_FLAGS, $event);
 
@@ -1130,6 +1336,8 @@ class ParticipantService {
 		$this->sessionMapper->update($session);
 
 		$this->dispatcher->dispatch(Room::EVENT_AFTER_SESSION_UPDATE_CALL_FLAGS, $event);
+		$event = new ParticipantModifiedEvent($room, $participant, AParticipantModifiedEvent::PROPERTY_IN_CALL, $flags, $oldFlags);
+		$this->dispatcher->dispatchTyped($event);
 	}
 
 	/**
@@ -1358,10 +1566,13 @@ class ParticipantService {
 		$helper->selectAttendeesTable($query);
 		$helper->selectSessionsTable($query);
 		$query->from('talk_attendees', 'a')
-			// Currently we only care if the user has a session at all, so we can select any: #ThisIsFine
+			// Currently we only care if the user has an active session at all, so we can select any
 			->leftJoin(
 				'a', 'talk_sessions', 's',
-				$query->expr()->eq('s.attendee_id', 'a.id')
+				$query->expr()->andX(
+					$query->expr()->eq('s.attendee_id', 'a.id'),
+					$query->expr()->eq('s.state', $query->createNamedParameter(Session::STATE_ACTIVE, IQueryBuilder::PARAM_INT))
+				)
 			)
 			->where($query->expr()->eq('a.room_id', $query->createNamedParameter($room->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($query->expr()->eq('a.notification_level', $query->createNamedParameter($notificationLevel, IQueryBuilder::PARAM_INT)));
@@ -1374,6 +1585,14 @@ class ParticipantService {
 		}
 
 		return array_values($uniqueAttendees);
+	}
+
+	/**
+	 * @return Participant[]
+	 */
+	public function getParticipantsByActorType(Room $room, string $actorType): array {
+		$attendees = $this->getActorsByType($room, $actorType);
+		return array_map(static fn (Attendee $attendee) => new Participant($room, $attendee, null), $attendees);
 	}
 
 	/**
@@ -1580,6 +1799,19 @@ class ParticipantService {
 		return (bool) $row;
 	}
 
+	public function cacheParticipant(Room $room, Participant $participant): void {
+		$attendee = $participant->getAttendee();
+
+		$this->actorCache[$room->getId()] ??= [];
+		$this->actorCache[$room->getId()][$attendee->getActorType()] ??= [];
+		$this->actorCache[$room->getId()][$attendee->getActorType()][$attendee->getActorId()] = $participant;
+		if ($participant->getSession()) {
+			$participantSessionId = $participant->getSession()->getSessionId();
+			$this->sessionCache[$room->getId()] ??= [];
+			$this->sessionCache[$room->getId()][$participantSessionId] = $participant;
+		}
+	}
+
 	/**
 	 * @param Room $room
 	 * @return bool
@@ -1633,8 +1865,8 @@ class ParticipantService {
 			throw new ParticipantNotFoundException('Not a user');
 		}
 
-		if (isset($this->userCache[$room->getId()][$userId])) {
-			$participant = $this->userCache[$room->getId()][$userId];
+		if (isset($this->actorCache[$room->getId()][Attendee::ACTOR_USERS][$userId])) {
+			$participant = $this->actorCache[$room->getId()][Attendee::ACTOR_USERS][$userId];
 			if (!$sessionId
 				|| ($participant->getSession() instanceof Session
 					&& $participant->getSession()->getSessionId() === $sessionId)) {
@@ -1666,8 +1898,9 @@ class ParticipantService {
 
 		$participant = $this->getParticipantFromQuery($query, $room);
 
-		$this->userCache[$room->getId()] ??= [];
-		$this->userCache[$room->getId()][$userId] = $participant;
+		$this->actorCache[$room->getId()] ??= [];
+		$this->actorCache[$room->getId()][Attendee::ACTOR_USERS] ??= [];
+		$this->actorCache[$room->getId()][Attendee::ACTOR_USERS][$userId] = $participant;
 		if ($participant->getSession()) {
 			$participantSessionId = $participant->getSession()->getSessionId();
 			$this->sessionCache[$room->getId()] ??= [];
@@ -1745,6 +1978,10 @@ class ParticipantService {
 	 * @throws ParticipantNotFoundException When the pin is not valid (has no participant assigned)
 	 */
 	public function getParticipantByActor(Room $room, string $actorType, string $actorId): Participant {
+		if (isset($this->actorCache[$room->getId()][$actorType][$actorId])) {
+			return $this->actorCache[$room->getId()][$actorType][$actorId];
+		}
+
 		if ($actorType === Attendee::ACTOR_USERS) {
 			return $this->getParticipant($room, $actorId, false);
 		}
@@ -1758,6 +1995,8 @@ class ParticipantService {
 			->andWhere($query->expr()->eq('a.room_id', $query->createNamedParameter($room->getId())))
 			->setMaxResults(1);
 
-		return $this->getParticipantFromQuery($query, $room);
+		$participant = $this->getParticipantFromQuery($query, $room);
+		$this->cacheParticipant($room, $participant);
+		return $participant;
 	}
 }

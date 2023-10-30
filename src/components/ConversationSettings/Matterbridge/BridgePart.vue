@@ -42,9 +42,10 @@
 				placement="bottom">
 				<NcActionLink icon="icon-info"
 					target="_blank"
-					:title="t('spreed', 'More information')"
 					:href="type.infoTarget"
-					:close-after-click="true" />
+					close-after-click>
+					{{ t('spreed', 'More information') }}
+				</NcActionLink>
 				<NcActionButton v-if="editable"
 					icon="icon-delete"
 					:close-after-click="true"
@@ -187,8 +188,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../../../assets/variables';
-
 .part {
 	padding-top: 10px;
 }
@@ -247,7 +246,7 @@ input {
 
 // Force action buttons to be 44px tall;
 :deep(.action-item__menutoggle) {
-	height: $clickable-area !important;
+	height: var(--default-clickable-area) !important;
 }
 
 .field {

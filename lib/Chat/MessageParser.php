@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace OCA\Talk\Chat;
 
 use OCA\Talk\Events\ChatMessageEvent;
+use OCA\Talk\Events\MessageParseEvent;
 use OCA\Talk\Exceptions\ParticipantNotFoundException;
 use OCA\Talk\MatterbridgeManager;
 use OCA\Talk\Model\Attendee;
@@ -42,6 +43,7 @@ use OCP\IUserManager;
  * Helper class to get a rich message from a plain text message.
  */
 class MessageParser {
+	/** @deprecated */
 	public const EVENT_MESSAGE_PARSE = self::class . '::parseMessage';
 
 	protected array $guestNames = [];
@@ -72,6 +74,8 @@ class MessageParser {
 
 		$event = new ChatMessageEvent($message);
 		$this->dispatcher->dispatch(self::EVENT_MESSAGE_PARSE, $event);
+		$event = new MessageParseEvent($message->getRoom(), $message);
+		$this->dispatcher->dispatchTyped($event);
 	}
 
 	protected function setActor(Message $message): void {
@@ -84,6 +88,12 @@ class MessageParser {
 		} elseif ($comment->getActorType() === Attendee::ACTOR_BRIDGED) {
 			$displayName = $comment->getActorId();
 			$actorId = MatterbridgeManager::BRIDGE_BOT_USERID;
+		} elseif ($comment->getActorType() === Attendee::ACTOR_GUESTS
+			&& $comment->getActorId() === Attendee::ACTOR_ID_CLI) {
+			$actorId = Attendee::ACTOR_ID_CLI;
+		} elseif ($comment->getActorType() === Attendee::ACTOR_GUESTS
+			&& $comment->getActorId() === Attendee::ACTOR_ID_CHANGELOG) {
+			$actorId = Attendee::ACTOR_ID_CHANGELOG;
 		} elseif ($comment->getActorType() === Attendee::ACTOR_GUESTS) {
 			if (isset($guestNames[$comment->getActorId()])) {
 				$displayName = $this->guestNames[$comment->getActorId()];
@@ -106,6 +116,9 @@ class MessageParser {
 					$displayName = $botName . ' (Bot)';
 				}
 			}
+		} elseif ($comment->getActorType() === Attendee::ACTOR_FEDERATED_USERS) {
+			// FIXME Read from some addressbooks?
+			$displayName = $actorId;
 		}
 
 		$message->setActor(
@@ -118,7 +131,7 @@ class MessageParser {
 	protected function getBotNameByUrlHashForConversation(string $token, string $urlHash): ?string {
 		if (!isset($this->botNames[$token])) {
 			$this->botNames[$token] = [];
-			$bots = $this->botService->getBotsForToken($token);
+			$bots = $this->botService->getBotsForToken($token, null);
 			foreach ($bots as $bot) {
 				$botServer = $bot->getBotServer();
 				$this->botNames[$token][$botServer->getUrlHash()] = $botServer->getName();

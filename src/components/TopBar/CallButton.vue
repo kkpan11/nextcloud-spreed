@@ -34,9 +34,20 @@
 			:type="startCallButtonType"
 			@click="handleClick">
 			<template #icon>
-				<VideoIcon :size="20" />
+				<PhoneIcon v-if="isPhoneRoom" :size="20" />
+				<VideoIcon v-else :size="20" />
 			</template>
 			{{ startCallLabel }}
+		</NcButton>
+		<NcButton v-else-if="showLeaveCallButton && canEndForAll && isPhoneRoom"
+			id="call_button"
+			type="error"
+			:disabled="loading"
+			@click="leaveCall(true)">
+			<template #icon>
+				<PhoneHangup :size="20" />
+			</template>
+			{{ t('spreed', 'End call') }}
 		</NcButton>
 		<NcButton v-else-if="showLeaveCallButton && !canEndForAll && !isBreakoutRoom"
 			id="call_button"
@@ -50,7 +61,8 @@
 		</NcButton>
 		<NcActions v-else-if="showLeaveCallButton && (canEndForAll || isBreakoutRoom)"
 			:disabled="loading"
-			:menu-title="leaveCallCombinedLabel"
+			:menu-name="leaveCallCombinedLabel"
+			force-name
 			:container="container"
 			type="error">
 			<template #icon>
@@ -81,7 +93,11 @@
 </template>
 
 <script>
+import { showError } from '@nextcloud/dialogs'
+
 import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
+import PhoneIcon from 'vue-material-design-icons/Phone.vue'
+import PhoneHangup from 'vue-material-design-icons/PhoneHangup.vue'
 import VideoIcon from 'vue-material-design-icons/Video.vue'
 import VideoBoxOff from 'vue-material-design-icons/VideoBoxOff.vue'
 import VideoOff from 'vue-material-design-icons/VideoOff.vue'
@@ -95,12 +111,13 @@ import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
 import Tooltip from '@nextcloud/vue/dist/Directives/Tooltip.js'
 
 import { useIsInCall } from '../../composables/useIsInCall.js'
-import { CALL, CONVERSATION, PARTICIPANT } from '../../constants.js'
+import { ATTENDEE, CALL, CONVERSATION, PARTICIPANT } from '../../constants.js'
 import browserCheck from '../../mixins/browserCheck.js'
 import isInLobby from '../../mixins/isInLobby.js'
 import participant from '../../mixins/participant.js'
-import BrowserStorage from '../../services/BrowserStorage.js'
+import { callSIPDialOut } from '../../services/callsService.js'
 import { EventBus } from '../../services/EventBus.js'
+import { useSettingsStore } from '../../stores/settings.js'
 
 export default {
 	name: 'CallButton',
@@ -112,11 +129,14 @@ export default {
 	components: {
 		NcActions,
 		NcActionButton,
+		NcButton,
+		// Icons
+		ArrowLeft,
+		PhoneHangup,
+		PhoneIcon,
 		VideoBoxOff,
 		VideoIcon,
 		VideoOff,
-		NcButton,
-		ArrowLeft,
 	},
 
 	mixins: [
@@ -126,11 +146,16 @@ export default {
 	],
 
 	props: {
+		disabled: {
+			type: Boolean,
+			default: false,
+		},
+
 		/**
-		 * Skips the media settings dialog and joins or starts the call
-		 * upon clicking the button
+		 * Whether the component is used in MediaSettings or not
+		 * (when click will directly start a call)
 		 */
-		forceJoinCall: {
+		isMediaSettings: {
 			type: Boolean,
 			default: false,
 		},
@@ -143,11 +168,22 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		isRecordingFromStart: {
+			type: Boolean,
+			default: false,
+		},
+
+		recordingConsentGiven: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	setup() {
 		const isInCall = useIsInCall()
-		return { isInCall }
+		const settingsStore = useSettingsStore()
+		return { isInCall, settingsStore }
 	},
 
 	data() {
@@ -171,14 +207,14 @@ export default {
 			return this.$store.getters.conversation(this.token) || this.$store.getters.dummyConversation
 		},
 
-		isStartingRecording() {
-			return this.conversation.callRecording === CALL.RECORDING.VIDEO_STARTING
-				|| this.conversation.callRecording === CALL.RECORDING.AUDIO_STARTING
+		showRecordingWarning() {
+			return [CALL.RECORDING.VIDEO_STARTING, CALL.RECORDING.AUDIO_STARTING,
+				CALL.RECORDING.VIDEO, CALL.RECORDING.AUDIO].includes(this.conversation.callRecording)
+			|| this.conversation.recordingConsent === CALL.RECORDING_CONSENT.REQUIRED
 		},
 
-		isRecording() {
-			return this.conversation.callRecording === CALL.RECORDING.VIDEO
-				|| this.conversation.callRecording === CALL.RECORDING.AUDIO
+		showMediaSettings() {
+			return this.settingsStore.getShowMediaSettings(this.token)
 		},
 
 		participantType() {
@@ -197,8 +233,8 @@ export default {
 		},
 
 		startCallButtonDisabled() {
-			return (!this.conversation.canStartCall
-					&& !this.hasCall)
+			return this.disabled
+				|| (!this.conversation.canStartCall && !this.hasCall)
 				|| this.isInLobby
 				|| this.conversation.readOnly
 				|| this.isNextcloudTalkHashDirty
@@ -254,6 +290,7 @@ export default {
 
 		showStartCallButton() {
 			return this.callEnabled
+				&& this.conversation.type !== CONVERSATION.TYPE.NOTE_TO_SELF
 				&& this.conversation.readOnly === CONVERSATION.STATE.READ_WRITE
 				&& !this.isInCall
 		},
@@ -268,8 +305,12 @@ export default {
 		},
 
 		isBreakoutRoom() {
-			return this.conversation.objectType === 'room'
+			return this.conversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM
 		},
+
+		isPhoneRoom() {
+			return this.conversation.objectType === CONVERSATION.OBJECT_TYPE.PHONE
+		}
 	},
 
 	mounted() {
@@ -289,7 +330,7 @@ export default {
 			if (this.conversation.permissions & PARTICIPANT.PERMISSIONS.PUBLISH_AUDIO) {
 				flags |= PARTICIPANT.CALL_FLAG.WITH_AUDIO
 			}
-			if (this.conversation.permissions & PARTICIPANT.PERMISSIONS.PUBLISH_VIDEO) {
+			if (this.conversation.permissions & PARTICIPANT.PERMISSIONS.PUBLISH_VIDEO && !this.isPhoneRoom) {
 				flags |= PARTICIPANT.CALL_FLAG.WITH_VIDEO
 			}
 
@@ -304,8 +345,23 @@ export default {
 				participantIdentifier: this.$store.getters.getParticipantIdentifier(),
 				flags,
 				silent: this.hasCall ? true : this.silentCall,
+				recordingConsent: this.recordingConsentGiven,
 			})
 			this.loading = false
+
+			if (this.isRecordingFromStart) {
+				this.$store.dispatch('startCallRecording', {
+					token: this.token,
+					callRecording: CALL.RECORDING.VIDEO,
+				})
+			}
+
+			if (this.isPhoneRoom) {
+				const attendeeId = this.$store.getters.participantsList(this.token)
+					.find(participant => participant.actorType === ATTENDEE.ACTOR_TYPE.PHONES)
+					?.attendeeId
+				this.dialOutPhoneNumber(attendeeId)
+			}
 		},
 
 		async leaveCall(endMeetingForAll = false) {
@@ -335,10 +391,13 @@ export default {
 			// Create audio objects as a result of a user interaction to allow playing sounds in Safari
 			this.$store.dispatch('createAudioObjects')
 
-			const shouldShowMediaSettingsScreen = (BrowserStorage.getItem('showMediaSettings' + this.token) === null
-				|| BrowserStorage.getItem('showMediaSettings' + this.token) === 'true') && !this.forceJoinCall
-			console.debug(shouldShowMediaSettingsScreen)
-			if (((this.isStartingRecording || this.isRecording) && !this.forceJoinCall) || shouldShowMediaSettingsScreen) {
+			if (this.isMediaSettings || this.isPhoneRoom) {
+				emit('talk:media-settings:hide')
+				this.joinCall()
+				return
+			}
+
+			if (this.showRecordingWarning || this.showMediaSettings) {
 				emit('talk:media-settings:show')
 			} else {
 				emit('talk:media-settings:hide')
@@ -351,6 +410,21 @@ export default {
 			EventBus.$emit('switch-to-conversation', {
 				token: parentRoomToken,
 			})
+		},
+
+		async dialOutPhoneNumber(attendeeId) {
+			try {
+				await callSIPDialOut(this.token, attendeeId)
+			} catch (error) {
+				if (error?.response?.data?.ocs?.data?.message) {
+					showError(t('spreed', 'Phone number could not be called: {error}', {
+						error: error?.response?.data?.ocs?.data?.message
+					}))
+				} else {
+					console.error(error)
+					showError(t('spreed', 'Phone number could not be called'))
+				}
+			}
 		},
 	},
 }

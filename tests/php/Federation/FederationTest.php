@@ -25,14 +25,16 @@ namespace OCA\Talk\Tests\php\Federation;
 use OC\Federation\CloudFederationShare;
 use OCA\FederatedFileSharing\AddressHandler;
 use OCA\Talk\Config;
+use OCA\Talk\Federation\BackendNotifier;
 use OCA\Talk\Federation\CloudFederationProviderTalk;
 use OCA\Talk\Federation\FederationManager;
-use OCA\Talk\Federation\Notifications;
 use OCA\Talk\Manager;
 use OCA\Talk\Model\Attendee;
 use OCA\Talk\Model\AttendeeMapper;
+use OCA\Talk\Model\InvitationMapper;
 use OCA\Talk\Room;
 use OCA\Talk\Service\ParticipantService;
+use OCA\Talk\Service\RoomService;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Federation\ICloudFederationFactory;
@@ -52,7 +54,7 @@ use Test\TestCase;
 class FederationTest extends TestCase {
 	protected ?FederationManager $federationManager = null;
 
-	protected ?Notifications $notifications = null;
+	protected ?BackendNotifier $backendNotifier = null;
 
 	/** @var ICloudFederationProviderManager|MockObject */
 	protected $cloudFederationProviderManager;
@@ -90,7 +92,7 @@ class FederationTest extends TestCase {
 		$this->config = $this->createMock(Config::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
 
-		$this->notifications = new Notifications(
+		$this->backendNotifier = new BackendNotifier(
 			$this->cloudFederationFactory,
 			$this->addressHandler,
 			$this->logger,
@@ -110,7 +112,9 @@ class FederationTest extends TestCase {
 			$this->notificationManager,
 			$this->createMock(IURLGenerator::class),
 			$this->createMock(ParticipantService::class),
+			$this->createMock(RoomService::class),
 			$this->attendeeMapper,
+			$this->createMock(InvitationMapper::class),
 			$this->createMock(Manager::class),
 			$this->createMock(ISession::class),
 			$this->createMock(IEventDispatcher::class),
@@ -194,7 +198,7 @@ class FederationTest extends TestCase {
 			->with($shareWith)
 			->willReturn(['test', 'remote.test.local']);
 
-		$this->notifications->sendRemoteShare($providerId, $token, $shareWith, $sharedBy, $sharedByFederatedId, $shareType, $room, $attendee);
+		$this->backendNotifier->sendRemoteShare($providerId, $token, $shareWith, $sharedBy, $sharedByFederatedId, $shareType, $room, $attendee);
 	}
 
 	public function testReceiveRemoteShare() {
@@ -337,7 +341,7 @@ class FederationTest extends TestCase {
 			->with($remote)
 			->willReturn(true);
 
-		$success = $this->notifications->sendShareAccepted($remote, $id, $token);
+		$success = $this->backendNotifier->sendShareAccepted($remote, $id, $token);
 
 		$this->assertEquals(true, $success);
 	}
@@ -374,7 +378,7 @@ class FederationTest extends TestCase {
 			->with($remote)
 			->willReturn(true);
 
-		$success = $this->notifications->sendShareDeclined($remote, $id, $token);
+		$success = $this->backendNotifier->sendShareDeclined($remote, $id, $token);
 
 		$this->assertEquals(true, $success);
 	}

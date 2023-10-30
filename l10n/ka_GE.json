@@ -15,6 +15,8 @@
     "Invalid file provided" : "არასწორი ფაილი",
     "Invalid image" : "არასწორი სურათი",
     "Unknown filetype" : "ამოუცნობი ფაილის ტიპი",
+    "Accept" : "მიღება",
+    "Decline" : "ურაყოფა",
     "Join call" : "შეუერთდით ზარს",
     "A group call has started in {call}" : "ჯგუფური ზარი დაიწყო {call}-ში",
     "Open settings" : "პარამეტრების გახსნა",
@@ -91,9 +93,9 @@
     "Upload" : "ატვირთვა",
     "Files" : "ფაილები",
     "Message sent" : "წერილი გაგზავნილია",
-    "Dismiss" : "დათხოვნა",
     "Reply" : "პასუხი",
     "Translate" : "გადათარგმნეთ",
+    "Dismiss" : "დათხოვნა",
     "Contact" : "კონტაქტი",
     "Today" : "დღეს",
     "Yesterday" : "გუშინ",
@@ -102,7 +104,6 @@
     "Create new poll" : "ახალი გამოკითხვის შექმნა",
     "Settings" : "პარამეტრები",
     "Create poll" : "გამოკითხვის შექმნა",
-    "Send" : "გაგზავნა",
     "moderator" : "მოდერატორი",
     "Demote from moderator" : "ჩამოიქვეითება მოდერატორობისგან",
     "Promote to moderator" : "დაწინაურება მოდერატორობაზე",
@@ -141,6 +142,7 @@
     "Android app" : "Android აპლიკაცია",
     "iOS app" : "iOS აპლიკაცია",
     "More actions" : "მეტი ქმედება",
-    "Conversation name" : "საუბრის სახელწოდება"
+    "Conversation name" : "საუბრის სახელწოდება",
+    "Send" : "გაგზავნა"
 },"pluralForm" :"nplurals=2; plural=(n!=1);"
 }

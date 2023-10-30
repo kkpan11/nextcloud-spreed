@@ -22,8 +22,8 @@
 
 <template>
 	<NcAppSidebar v-show="opened"
-		:title="title"
-		:title-tooltip="title"
+		:name="name"
+		:title="name"
 		:active="activeTab"
 		:class="'active-tab-' + activeTab"
 		@update:active="handleUpdateActive"
@@ -41,7 +41,7 @@
 			</template>
 			<ChatView :is-visible="opened" />
 		</NcAppSidebarTab>
-		<NcAppSidebarTab v-if="(getUserId || isModeratorOrUser) && !isOneToOne"
+		<NcAppSidebarTab v-if="showParticipantsTab"
 			id="participants"
 			ref="participantsTab"
 			:order="2"
@@ -182,7 +182,7 @@ export default {
 		},
 
 		mainConversationToken() {
-			if (this.conversation.objectType === 'room') {
+			if (this.conversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM) {
 				return this.conversation.objectId
 			}
 			return this.token
@@ -202,7 +202,7 @@ export default {
 
 		canSearchParticipants() {
 			return (this.conversation.type === CONVERSATION.TYPE.GROUP
-				|| (this.conversation.type === CONVERSATION.TYPE.PUBLIC && this.conversation.objectType !== 'share:password'))
+				|| (this.conversation.type === CONVERSATION.TYPE.PUBLIC && this.conversation.objectType !== CONVERSATION.OBJECT_TYPE.VIDEO_VERIFICATION))
 		},
 
 		isSearching() {
@@ -222,11 +222,11 @@ export default {
 		},
 
 		/**
-		 * The conversation title value passed into the NcAppSidebar component.
+		 * The conversation name value passed into the NcAppSidebar component.
 		 *
-		 * @return {string} The conversation's title.
+		 * @return {string} The conversation's name.
 		 */
-		title() {
+		name() {
 			if (this.isRenamingConversation) {
 				return this.conversationName
 			} else {
@@ -263,7 +263,15 @@ export default {
 
 		showBreakoutRoomsTab() {
 			return this.getUserId && !this.isOneToOne
-				&& (this.breakoutRoomsConfigured || this.conversation.breakoutRoomMode === CONVERSATION.BREAKOUT_ROOM_MODE.FREE || this.conversation.objectType === 'room')
+				&& (this.breakoutRoomsConfigured || this.conversation.breakoutRoomMode === CONVERSATION.BREAKOUT_ROOM_MODE.FREE || this.conversation.objectType === CONVERSATION.OBJECT_TYPE.BREAKOUT_ROOM)
+		},
+
+		showParticipantsTab() {
+			return (this.getUserId || this.isModeratorOrUser) && !this.isOneToOne && !this.isNoteToSelf
+		},
+
+		isNoteToSelf() {
+			return this.conversation.type === CONVERSATION.TYPE.NOTE_TO_SELF
 		},
 
 		breakoutRoomsText() {
@@ -277,12 +285,7 @@ export default {
 				this.conversationName = this.conversation.displayName
 			}
 
-			if (newConversation.token === oldConversation.token) {
-				return
-			}
-
-			if (this.isOneToOne) {
-				this.activeTab = 'shared-items'
+			if (newConversation.token === oldConversation.token || !this.showParticipantsTab) {
 				return
 			}
 
@@ -299,6 +302,15 @@ export default {
 			}
 		},
 
+		showParticipantsTab: {
+			immediate: true,
+			handler(value) {
+				if (!value) {
+					this.activeTab = 'shared-items'
+				}
+			},
+		},
+
 		isInCall(newValue) {
 			if (newValue) {
 				// Set 'chat' tab as active, and switch to it if sidebar is open
@@ -312,9 +324,7 @@ export default {
 			}
 
 			// In other case switch to other tabs
-			if (this.isOneToOne) {
-				this.activeTab = 'shared-items'
-			} else {
+			if (!this.isOneToOne) {
 				this.activeTab = 'participants'
 			}
 		},
@@ -325,9 +335,14 @@ export default {
 			}
 		},
 
-		// Switch tab for guest if he is demoted from moderators
 		isModeratorOrUser(newValue) {
-			if (!newValue) {
+			if (newValue) {
+				// Fetch participants list if guest was promoted to moderators
+				this.$nextTick(() => {
+					emit('guest-promoted', { token: this.token })
+				})
+			} else {
+				// Switch active tab to chat if guest was demoted from moderators
 				this.activeTab = 'chat'
 			}
 		},

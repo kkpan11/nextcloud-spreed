@@ -8,6 +8,8 @@ OC.L10N.register(
     "Invalid image" : "Figurë e pavlefshme",
     "Unknown filetype" : "Lloj i panjohur skedari",
     "Dismiss notification" : "Hiq lajmërimin",
+    "Accept" : "Prano",
+    "Decline" : "Refuzo",
     "Open settings" : "Hap rregullimet",
     "Conversations" : "Bisedat",
     "Avatar image is not square" : "Imazhi avatar nuk është katror",
@@ -216,9 +218,9 @@ OC.L10N.register(
     "Upload" : "Ngarkoni",
     "Files" : "Skedarët",
     "Message sent" : "Mesazhi u dërgua",
-    "Dismiss" : "Hiq",
     "Reply" : "Përgjigju",
     "Translate" : "Përkthe",
+    "Dismiss" : "Hiq",
     "Contact" : "Kontakt",
     "Today" : "Sot",
     "Yesterday" : "Dje",
@@ -228,7 +230,6 @@ OC.L10N.register(
     "New file" : "Skedë e re",
     "Settings" : "Rregullimet",
     "Create poll" : "Krijo sondazh",
-    "Send" : "Dërgo",
     "guest" : "vizitor",
     "No results" : "Asnjë rezultat",
     "Add users or groups" : "Add users or groups",
@@ -263,6 +264,7 @@ OC.L10N.register(
     "iOS app" : "Aplikacion iOS",
     "More actions" : "Më tepër veprime ",
     "Conversation name" : "Emri i bisedës",
-    "Rename conversation" : "Riemërtojeni bisedën"
+    "Rename conversation" : "Riemërtojeni bisedën",
+    "Send" : "Dërgo"
 },
 "nplurals=2; plural=(n != 1);");

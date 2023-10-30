@@ -62,6 +62,14 @@ const searchListedConversations = async function({ searchText }, options) {
 }
 
 /**
+ * Generate note-to-self conversation
+ *
+ */
+const fetchNoteToSelfConversation = async function() {
+	return axios.get(generateOcsUrl('apps/spreed/api/v4/room/note-to-self'))
+}
+
+/**
  * Fetch possible conversations
  *
  * @param {object} data the wrapping object;
@@ -106,8 +114,10 @@ const searchPossibleConversations = async function({ searchText, token, onlyUser
  */
 const createOneToOneConversation = async function(userId) {
 	try {
-		const response = await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), { roomType: CONVERSATION.TYPE.ONE_TO_ONE, invite: userId })
-		return response
+		return await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), {
+			roomType: CONVERSATION.TYPE.ONE_TO_ONE,
+			invite: userId
+		})
 	} catch (error) {
 		console.debug('Error creating new one to one conversation: ', error)
 	}
@@ -121,8 +131,11 @@ const createOneToOneConversation = async function(userId) {
  */
 const createGroupConversation = async function(invite, source) {
 	try {
-		const response = await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), { roomType: CONVERSATION.TYPE.GROUP, invite, source: source || 'groups' })
-		return response
+		return await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), {
+			roomType: CONVERSATION.TYPE.GROUP,
+			invite,
+			source: source || 'groups'
+		})
 	} catch (error) {
 		console.debug('Error creating new group conversation: ', error)
 	}
@@ -132,11 +145,15 @@ const createGroupConversation = async function(invite, source) {
  * Create a new private conversation.
  *
  * @param {string} conversationName The name for the new conversation
+ * @param {string} [objectType] The conversation object type
  */
-const createPrivateConversation = async function(conversationName) {
+const createPrivateConversation = async function(conversationName, objectType) {
 	try {
-		const response = await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), { roomType: CONVERSATION.TYPE.GROUP, roomName: conversationName })
-		return response
+		return await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), {
+			roomType: CONVERSATION.TYPE.GROUP,
+			roomName: conversationName,
+			objectType,
+		})
 	} catch (error) {
 		console.debug('Error creating new private conversation: ', error)
 	}
@@ -146,11 +163,15 @@ const createPrivateConversation = async function(conversationName) {
  * Create a new private conversation.
  *
  * @param {string} conversationName The name for the new conversation
+ * @param {string} [objectType] The conversation object type
  */
-const createPublicConversation = async function(conversationName) {
+const createPublicConversation = async function(conversationName, objectType) {
 	try {
-		const response = await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), { roomType: CONVERSATION.TYPE.PUBLIC, roomName: conversationName })
-		return response
+		return await axios.post(generateOcsUrl('apps/spreed/api/v4/room'), {
+			roomType: CONVERSATION.TYPE.PUBLIC,
+			roomName: conversationName,
+			objectType,
+		})
 	} catch (error) {
 		console.debug('Error creating new public conversation: ', error)
 	}
@@ -319,6 +340,18 @@ const setSIPEnabled = async function(token, newState) {
 }
 
 /**
+ * Change the recording consent per conversation
+ *
+ * @param {string} token The token of the conversation to be modified
+ * @param {number} newState The new recording consent state to set
+ */
+const setRecordingConsent = async function(token, newState) {
+	return axios.put(generateOcsUrl('apps/spreed/api/v4/room/{token}/recording-consent', { token }), {
+		recordingConsent: newState,
+	})
+}
+
+/**
  * Change the lobby state
  *
  * @param {string} token The token of the conversation to be modified
@@ -438,6 +471,7 @@ const deleteConversationAvatar = async function(token) {
 export {
 	fetchConversations,
 	fetchConversation,
+	fetchNoteToSelfConversation,
 	searchListedConversations,
 	searchPossibleConversations,
 	createOneToOneConversation,
@@ -452,6 +486,7 @@ export {
 	makePublic,
 	makePrivate,
 	setSIPEnabled,
+	setRecordingConsent,
 	changeLobbyState,
 	changeReadOnlyState,
 	changeListable,

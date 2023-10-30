@@ -24,12 +24,12 @@ declare(strict_types=1);
  */
 
 $requirements = [
-	'apiVersion' => 'v3',
+	'apiVersion' => '(v3)',
 ];
 
 
 $requirementsWithToken = [
-	'apiVersion' => 'v3',
+	'apiVersion' => '(v3)',
 	'token' => '[a-z0-9]{4,30}',
 ];
 
@@ -43,8 +43,8 @@ return [
 		])],
 		/** @see \OCA\Talk\Controller\SignalingController::backend() */
 		['name' => 'Signaling#backend', 'url' => '/api/{apiVersion}/signaling/backend', 'verb' => 'POST', 'requirements' => $requirements],
-		/** @see \OCA\Talk\Controller\SignalingController::signaling() */
-		['name' => 'Signaling#signaling', 'url' => '/api/{apiVersion}/signaling/{token}', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
+		/** @see \OCA\Talk\Controller\SignalingController::sendMessages() */
+		['name' => 'Signaling#sendMessages', 'url' => '/api/{apiVersion}/signaling/{token}', 'verb' => 'POST', 'requirements' => $requirementsWithToken],
 		/** @see \OCA\Talk\Controller\SignalingController::pullMessages() */
 		['name' => 'Signaling#pullMessages', 'url' => '/api/{apiVersion}/signaling/{token}', 'verb' => 'GET', 'requirements' => $requirementsWithToken],
 	],

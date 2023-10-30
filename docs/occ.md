@@ -10,10 +10,10 @@ Install a new bot on the server
 
 | Arguments | Description | Is required | Is array | Default |
 |---|---|---|---|---|
-| `name` | The name under which the messages will be posted | yes | no | *Required* |
-| `secret` | Secret used to validate API calls | yes | no | *Required* |
-| `url` | Webhook endpoint to post messages to | yes | no | *Required* |
-| `description` | Optional description shown in the admin settings | no | no | `NULL` |
+| `name` | The name under which the messages will be posted (min. 1 char, max. 64 chars) | yes | no | *Required* |
+| `secret` | Secret used to validate API calls (min. 40 chars, max. 128 chars) | yes | no | *Required* |
+| `url` | Webhook endpoint to post messages to (max. 4000 chars) | yes | no | *Required* |
+| `description` | Optional description shown in the admin settings (max. 4000 chars) | no | no | `NULL` |
 
 | Options | Description | Accept value | Is value required | Is multiple | Default |
 |---|---|---|---|---|---|
@@ -223,6 +223,21 @@ Prints the number of attendees, active sessions and participant in the call.
 |---|---|---|---|---|---|
 | `--output` | Output format (plain, json or json_pretty, default is plain) | yes | no | no | `'plain'` |
 | `--separator` | Separator for the CSV list when output=csv is used | yes | yes | no | *Required* |
+
+## talk:recording:consent
+
+List all matching consent that were given to be audio and video recorded during a call (requires administrator or moderator configuration)
+
+### Usage
+
+* `talk:recording:consent [--output [OUTPUT]] [--token TOKEN] [--actor-type ACTOR-TYPE] [--actor-id ACTOR-ID]`
+
+| Options | Description | Accept value | Is value required | Is multiple | Default |
+|---|---|---|---|---|---|
+| `--output` | Output format (plain, json or json_pretty, default is plain) | yes | no | no | `'plain'` |
+| `--token` | Limit to the given conversation | yes | yes | no | *Required* |
+| `--actor-type` | Limit to the given actor (only valid when --actor-id is also provided) | yes | yes | no | *Required* |
+| `--actor-id` | Limit to the given actor (only valid when --actor-type is also provided) | yes | yes | no | *Required* |
 
 ## talk:room:add
 

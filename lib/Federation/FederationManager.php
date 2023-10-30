@@ -36,10 +36,9 @@ use OCA\Talk\Model\InvitationMapper;
 use OCA\Talk\Room;
 use OCA\Talk\Service\ParticipantService;
 use OCP\AppFramework\Db\DoesNotExistException;
-use OCP\AppFramework\Db\MultipleObjectsReturnedException;
-use OCP\DB\Exception as DBException;
 use OCP\IConfig;
 use OCP\IUser;
+use OCP\Notification\IManager;
 
 /**
  * Class FederationManager
@@ -51,14 +50,19 @@ use OCP\IUser;
 class FederationManager {
 	public const TALK_ROOM_RESOURCE = 'talk-room';
 	public const TALK_PROTOCOL_NAME = 'nctalk';
-	public const TOKEN_LENGTH = 15;
+	public const NOTIFICATION_SHARE_ACCEPTED = 'SHARE_ACCEPTED';
+	public const NOTIFICATION_SHARE_DECLINED = 'SHARE_DECLINED';
+	public const NOTIFICATION_SHARE_UNSHARED = 'SHARE_UNSHARED';
+	public const NOTIFICATION_ROOM_MODIFIED = 'ROOM_MODIFIED';
+	public const TOKEN_LENGTH = 64;
 
 	public function __construct(
 		private IConfig $config,
 		private Manager $manager,
 		private ParticipantService $participantService,
 		private InvitationMapper $invitationMapper,
-		private Notifications $notifications,
+		private BackendNotifier $backendNotifier,
+		private IManager $notificationManager,
 	) {
 	}
 
@@ -81,7 +85,6 @@ class FederationManager {
 	 * @param string $remoteUrl
 	 * @param string $sharedSecret
 	 * @return int share id for this specific remote room share
-	 * @throws DBException
 	 */
 	public function addRemoteRoom(IUser $user, string $remoteId, int $roomType, string $roomName, string $roomToken, string $remoteUrl, string $sharedSecret): int {
 		try {
@@ -99,10 +102,16 @@ class FederationManager {
 		return $invitation->getId();
 	}
 
+	protected function markNotificationProcessed(string $userId, int $shareId): void {
+		$notification = $this->notificationManager->createNotification();
+		$notification->setApp(Application::APP_ID)
+			->setUser($userId)
+			->setObject('remote_talk_share', (string) $shareId);
+		$this->notificationManager->markProcessed($notification);
+	}
+
 	/**
-	 * @throws DBException
 	 * @throws UnauthorizedException
-	 * @throws MultipleObjectsReturnedException
 	 * @throws DoesNotExistException
 	 * @throws CannotReachRemoteException
 	 */
@@ -115,7 +124,7 @@ class FederationManager {
 		// Add user to the room
 		$room = $this->manager->getRoomById($invitation->getRoomId());
 		if (
-			!$this->notifications->sendShareAccepted($room->getRemoteServer(), $invitation->getRemoteId(), $invitation->getAccessToken())
+			!$this->backendNotifier->sendShareAccepted($room->getRemoteServer(), $invitation->getRemoteId(), $invitation->getAccessToken())
 		) {
 			throw new CannotReachRemoteException();
 		}
@@ -133,12 +142,19 @@ class FederationManager {
 		$this->participantService->addUsers($room, $participant, $user);
 
 		$this->invitationMapper->delete($invitation);
+
+		$this->markNotificationProcessed($user->getUID(), $shareId);
 	}
 
 	/**
-	 * @throws DBException
+	 * @throws DoesNotExistException
+	 */
+	public function getRemoteShareById(int $shareId): Invitation {
+		return $this->invitationMapper->getInvitationById($shareId);
+	}
+
+	/**
 	 * @throws UnauthorizedException
-	 * @throws MultipleObjectsReturnedException
 	 * @throws DoesNotExistException
 	 */
 	public function rejectRemoteRoomShare(IUser $user, int $shareId): void {
@@ -151,21 +167,19 @@ class FederationManager {
 
 		$this->invitationMapper->delete($invitation);
 
-		$this->notifications->sendShareDeclined($room->getRemoteServer(), $invitation->getRemoteId(), $invitation->getAccessToken());
+		$this->markNotificationProcessed($user->getUID(), $shareId);
+
+		$this->backendNotifier->sendShareDeclined($room->getRemoteServer(), $invitation->getRemoteId(), $invitation->getAccessToken());
 	}
 
 	/**
 	 * @param IUser $user
 	 * @return Invitation[]
-	 * @throws DBException
 	 */
 	public function getRemoteRoomShares(IUser $user): array {
 		return $this->invitationMapper->getInvitationsForUser($user);
 	}
 
-	/**
-	 * @throws DBException
-	 */
 	public function getNumberOfInvitations(Room $room): int {
 		return $this->invitationMapper->countInvitationsForRoom($room);
 	}

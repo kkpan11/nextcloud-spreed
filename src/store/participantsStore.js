@@ -19,9 +19,12 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *
  */
+import Hex from 'crypto-js/enc-hex.js'
+import SHA1 from 'crypto-js/sha1.js'
 import Vue from 'vue'
 
 import { showError } from '@nextcloud/dialogs'
+import { emit } from '@nextcloud/event-bus'
 import { generateUrl } from '@nextcloud/router'
 
 import { PARTICIPANT } from '../constants.js'
@@ -43,14 +46,19 @@ import {
 	removeAllPermissionsFromParticipant,
 	setPermissions,
 	setTyping,
+	fetchParticipants,
 } from '../services/participantsService.js'
 import SessionStorage from '../services/SessionStorage.js'
 import { talkBroadcastChannel } from '../services/talkBroadcastChannel.js'
+import { useGuestNameStore } from '../stores/guestName.js'
+import CancelableRequest from '../utils/cancelableRequest.js'
 
 const state = {
 	attendees: {
 	},
 	peers: {
+	},
+	phones: {
 	},
 	inCall: {
 	},
@@ -60,6 +68,12 @@ const state = {
 	},
 	speaking: {
 	},
+	/**
+	 * Stores the cancel function returned by `cancelableFetchParticipants`,
+	 * which allows to cancel the previous request for participants
+	 * when quickly switching to a new conversation.
+	 */
+	cancelFetchParticipants: null,
 }
 
 const getters = {
@@ -235,6 +249,14 @@ const getters = {
 		}
 
 		return {}
+	},
+
+	getPhoneStatus: (state) => (callId) => {
+		return state.phones[callId]?.state?.status
+	},
+
+	getPhoneMute: (state) => (callId) => {
+		return state.phones[callId]?.mute
 	},
 
 	participantsInCall: (state) => (token) => {
@@ -414,6 +436,28 @@ const mutations = {
 			Vue.delete(state.peers, token)
 		}
 	},
+
+	setCancelFetchParticipants(state, cancelFunction) {
+		state.cancelFetchParticipants = cancelFunction
+	},
+
+	setPhoneState(state, { callid, value = {} }) {
+		if (!state.phones[callid]) {
+			Vue.set(state.phones, callid, { state: null, mute: 0 })
+		}
+		Vue.set(state.phones[callid], 'state', value)
+	},
+
+	setPhoneMute(state, { callid, value }) {
+		if (!state.phones[callid]) {
+			Vue.set(state.phones, callid, { state: null, mute: 0 })
+		}
+		Vue.set(state.phones[callid], 'mute', value)
+	},
+
+	deletePhoneState(state, callid) {
+		Vue.delete(state.phones, callid)
+	},
 }
 
 const actions = {
@@ -536,7 +580,82 @@ const actions = {
 		commit('updateParticipant', { token, attendeeId: attendee.attendeeId, updatedData })
 	},
 
-	async joinCall({ commit, getters }, { token, participantIdentifier, flags, silent }) {
+	/**
+	 * Fetches participants that belong to a particular conversation
+	 * specified with its token.
+	 *
+	 * @param {object} context default store context;
+	 * @param {object} data the wrapping object;
+	 * @param {string} data.token the conversation token;
+	 * @return {object|null}
+	 */
+	async fetchParticipants(context, { token }) {
+		const guestNameStore = useGuestNameStore()
+		// Cancel a previous request
+		context.dispatch('cancelFetchParticipants')
+		// Get a new cancelable request function and cancel function pair
+		const { request, cancel } = CancelableRequest(fetchParticipants)
+		// Assign the new cancel function to our data value
+		context.commit('setCancelFetchParticipants', cancel)
+
+		try {
+			const response = await request(token)
+			context.dispatch('purgeParticipantsStore', token)
+
+			const hasUserStatuses = !!response.headers['x-nextcloud-has-user-statuses']
+
+			response.data.ocs.data.forEach(participant => {
+				context.dispatch('addParticipant', { token, participant })
+
+				if (participant.participantType === PARTICIPANT.TYPE.GUEST
+					|| participant.participantType === PARTICIPANT.TYPE.GUEST_MODERATOR) {
+					guestNameStore.addGuestName({
+						token,
+						actorId: Hex.stringify(SHA1(participant.sessionIds[0])),
+						actorDisplayName: participant.displayName,
+					}, { noUpdate: false })
+				} else if (participant.actorType === 'users' && hasUserStatuses) {
+					emit('user_status:status.updated', {
+						status: participant.status,
+						message: participant.statusMessage,
+						icon: participant.statusIcon,
+						clearAt: participant.statusClearAt,
+						userId: participant.actorId,
+					})
+				}
+			})
+
+			// Discard current cancel function
+			context.commit('setCancelFetchParticipants', null)
+
+			return response
+		} catch (exception) {
+			if (exception?.response?.status === 403) {
+				context.dispatch('fetchConversation', { token })
+			} else if (!CancelableRequest.isCancel(exception)) {
+				console.error(exception)
+				showError(t('spreed', 'An error occurred while fetching the participants'))
+			}
+			return null
+		}
+	},
+
+	/**
+	 * Cancels a previously running "fetchParticipants" action if applicable.
+	 *
+	 * @param {object} context default store context;
+	 * @return {boolean} true if a request got cancelled, false otherwise
+	 */
+	cancelFetchParticipants(context) {
+		if (context.state.cancelFetchParticipants) {
+			context.state.cancelFetchParticipants('canceled')
+			context.commit('setCancelFetchParticipants', null)
+			return true
+		}
+		return false
+	},
+
+	async joinCall({ commit, getters }, { token, participantIdentifier, flags, silent, recordingConsent }) {
 		if (!participantIdentifier?.sessionId) {
 			console.error('Trying to join call without sessionId')
 			return
@@ -554,7 +673,7 @@ const actions = {
 			flags,
 		})
 
-		const actualFlags = await joinCall(token, flags, silent)
+		const actualFlags = await joinCall(token, flags, silent, recordingConsent)
 
 		const updatedData = {
 			inCall: actualFlags,
@@ -827,6 +946,37 @@ const actions = {
 
 	purgeSpeakingStore(context, { token }) {
 		context.commit('purgeSpeakingStore', { token })
+	},
+
+	processDialOutAnswer(context, { callid }) {
+		context.commit('setPhoneState', { callid })
+	},
+
+	processTransientCallStatus(context, { value }) {
+		context.commit('setPhoneState', { callid: value.callid, value })
+
+		if (value.status === 'cleared' || value.status === 'rejected') {
+			setTimeout(() => {
+				context.commit('deletePhoneState', value.callid)
+			}, 5000)
+		}
+	},
+
+	addPhonesStates(context, { phoneStates }) {
+		Object.values(phoneStates).forEach(phoneState => {
+			context.commit('setPhoneState', {
+				callid: phoneState.callid,
+				value: phoneState
+			})
+		})
+	},
+
+	deletePhoneState(context, { callid }) {
+		context.commit('deletePhoneState', callid)
+	},
+
+	setPhoneMute(context, { callid, value }) {
+		context.commit('setPhoneMute', { callid, value })
 	},
 }
 

@@ -65,6 +65,8 @@ class SystemMessage {
 	protected array $circleLinks = [];
 	/** @var string[] */
 	protected array $guestNames = [];
+	/** @var array<string, array<string, string>> */
+	protected array $phoneNames = [];
 
 	public function __construct(
 		protected IUserManager $userManager,
@@ -191,11 +193,11 @@ class SystemMessage {
 				$parsedMessage = $this->l->t('An administrator opened the conversation to registered users');
 			}
 		} elseif ($message === 'listable_all') {
-			$parsedMessage = $this->l->t('{actor} opened the conversation to registered and guest app users');
+			$parsedMessage = $this->l->t('{actor} opened the conversation to registered users and users created with the Guests app');
 			if ($currentUserIsActor) {
-				$parsedMessage = $this->l->t('You opened the conversation to registered and guest app users');
+				$parsedMessage = $this->l->t('You opened the conversation to registered users and users created with the Guests app');
 			} elseif ($cliIsActor) {
-				$parsedMessage = $this->l->t('An administrator opened the conversation to registered and guest app users');
+				$parsedMessage = $this->l->t('An administrator opened the conversation to registered users and users created with the Guests app');
 			}
 		} elseif ($message === 'lobby_timer_reached') {
 			$parsedMessage = $this->l->t('The conversation is now open to everyone');
@@ -289,11 +291,11 @@ class SystemMessage {
 			}
 		} elseif ($message === 'federated_user_added') {
 			$parsedParameters['federated_user'] = $this->getRemoteUser($parameters['federated_user']);
-			$parsedMessage = $this->l->t('{actor} invited {user}');
+			$parsedMessage = $this->l->t('{actor} invited {federated_user}');
 			if ($currentUserIsActor) {
-				$parsedMessage = $this->l->t('You invited {user}');
+				$parsedMessage = $this->l->t('You invited {federated_user}');
 			} elseif ($cliIsActor) {
-				$parsedMessage = $this->l->t('An administrator invited {user}');
+				$parsedMessage = $this->l->t('An administrator invited {federated_user}');
 			} elseif ($parsedParameters['federated_user']['id'] === $parsedParameters['actor']['id']) {
 				$parsedMessage = $this->l->t('{federated_user} accepted the invitation');
 			}
@@ -338,6 +340,22 @@ class SystemMessage {
 				$parsedMessage = $this->l->t('You removed circle {circle}');
 			} elseif ($cliIsActor) {
 				$parsedMessage = $this->l->t('An administrator removed circle {circle}');
+			}
+		} elseif ($message === 'phone_added') {
+			$parsedParameters['phone'] = $this->getPhone($room, $parameters['phone'], $parameters['name']);
+			$parsedMessage = $this->l->t('{actor} added {phone}');
+			if ($currentUserIsActor) {
+				$parsedMessage = $this->l->t('You added {phone}');
+			} elseif ($cliIsActor) {
+				$parsedMessage = $this->l->t('An administrator added {phone}');
+			}
+		} elseif ($message === 'phone_removed') {
+			$parsedParameters['phone'] = $this->getPhone($room, $parameters['phone'], $parameters['name']);
+			$parsedMessage = $this->l->t('{actor} removed {phone}');
+			if ($currentUserIsActor) {
+				$parsedMessage = $this->l->t('You removed {phone}');
+			} elseif ($cliIsActor) {
+				$parsedMessage = $this->l->t('An administrator removed {phone}');
 			}
 		} elseif ($message === 'moderator_promoted') {
 			$parsedParameters['user'] = $this->getUser($parameters['user']);
@@ -408,6 +426,10 @@ class SystemMessage {
 					}
 				} else {
 					$chatMessage->setMessageType(ChatManager::VERB_MESSAGE);
+				}
+
+				if (isset($metaData['caption']) && $metaData['caption'] !== '') {
+					$parsedMessage = $metaData['caption'];
 				}
 			} catch (\Exception $e) {
 				$parsedMessage = $this->l->t('{actor} shared a file which is no longer available');
@@ -703,6 +725,9 @@ class SystemMessage {
 		if ($actorType === Attendee::ACTOR_GUESTS || $actorType === Attendee::ACTOR_EMAILS) {
 			return $this->getGuest($room, $actorType, $actorId);
 		}
+		if ($actorType === Attendee::ACTOR_PHONES) {
+			return $this->getPhone($room, $actorId, '');
+		}
 		if ($actorType === Attendee::ACTOR_FEDERATED_USERS) {
 			return $this->getRemoteUser($actorId);
 		}
@@ -766,6 +791,18 @@ class SystemMessage {
 		];
 	}
 
+	protected function getPhone(Room $room, string $actorId, string $fallbackDisplayName): array {
+		if (!isset($this->phoneNames[$room->getToken()][$actorId])) {
+			$this->phoneNames[$room->getToken()][$actorId] = $this->getDisplayNamePhone($room, $actorId, $fallbackDisplayName);
+		}
+
+		return [
+			'type' => 'highlight',
+			'id' => $actorId,
+			'name' => $this->phoneNames[$room->getToken()][$actorId],
+		];
+	}
+
 	protected function getCircle(string $circleId): array {
 		if (!isset($this->circleNames[$circleId])) {
 			$this->loadCircleDetails($circleId);
@@ -785,6 +822,18 @@ class SystemMessage {
 			'name' => $this->circleNames[$circleId],
 			'url' => $this->circleLinks[$circleId],
 		];
+	}
+
+	protected function getDisplayNamePhone(Room $room, string $actorId, string $fallbackDisplayName): string {
+		try {
+			$participant = $this->participantService->getParticipantByActor($room, Attendee::ACTOR_PHONES, $actorId);
+			return $participant->getAttendee()->getDisplayName();
+		} catch (ParticipantNotFoundException) {
+			if ($fallbackDisplayName) {
+				return $fallbackDisplayName;
+			}
+			return $this->l->t('Unknown number');
+		}
 	}
 
 	protected function getDisplayNameGroup(string $gid): string {
@@ -823,6 +872,10 @@ class SystemMessage {
 	}
 
 	protected function getGuestName(Room $room, string $actorType, string $actorId): string {
+		if ($actorId === Attendee::ACTOR_ID_CLI) {
+			return $this->l->t('Guest');
+		}
+
 		try {
 			$participant = $this->participantService->getParticipantByActor($room, $actorType, $actorId);
 			$name = $participant->getAttendee()->getDisplayName();

@@ -56,7 +56,8 @@ get the messagesList array and loop through the list to generate the messages.
 				:count="15" />
 		</template>
 		<NcEmptyContent v-else-if="showEmptyContent"
-			:title="t('spreed', 'No messages')"
+			class="messages-list__empty-content"
+			:name="t('spreed', 'No messages')"
 			:description="t('spreed', 'All messages have expired or have been deleted.')">
 			<template #icon>
 				<Message :size="64" />
@@ -420,8 +421,8 @@ export default {
 				return false
 			}
 
-			// Only group messages within a short period of time, so unrelated messages are not grouped together
-			return (this.getDateOfMessage(message1).format('X') - this.getDateOfMessage(message2).format('X')) < 300
+			// Only group messages within a short period of time (5 minutes), so unrelated messages are not grouped together
+			return this.getDateOfMessage(message1).diff(this.getDateOfMessage(message2)) < 300 * 1000
 		},
 
 		/**
@@ -529,7 +530,8 @@ export default {
 
 			// if no scrollbars, clear read marker directly as scrolling is not possible for the user to clear it
 			// also clear in case lastReadMessage is zero which is due to an older bug
-			if (this.visualLastReadMessageId === 0 || this.$refs.scroller.scrollHeight <= this.$refs.scroller.offsetHeight) {
+			if (this.visualLastReadMessageId === 0
+				|| (this.$refs.scroller && this.$refs.scroller.scrollHeight <= this.$refs.scroller.offsetHeight)) {
 				// clear after a delay, unless scrolling can resume in-between
 				this.debounceUpdateReadMarkerPosition()
 			}
@@ -749,6 +751,10 @@ export default {
 		 * or to the bottom of the list bottom.
 		 */
 		async handleScroll() {
+			if (!this.$refs.scroller) {
+				return
+			}
+
 			if (!this.$store.getters.getFirstKnownMessageId(this.token)) {
 				// This can happen if the browser is fast enough to close the sidebar
 				// when switching from a one-to-one to a group conversation.
@@ -815,6 +821,10 @@ export default {
 		 * @return {object} DOM element for the last visible message
 		 */
 		findFirstVisibleMessage(messageEl) {
+			if (!this.$refs.scroller) {
+				return
+			}
+
 			let el = messageEl
 
 			// When the current message is not visible (reaction or expired)
@@ -915,7 +925,8 @@ export default {
 				return
 			}
 
-			if (lastReadMessageElement && (lastReadMessageElement.offsetTop - this.$refs.scroller.scrollTop > 0)) {
+			if (lastReadMessageElement && this.$refs.scroller
+				&& (lastReadMessageElement.offsetTop - this.$refs.scroller.scrollTop > 0)) {
 				// still visible, hasn't disappeared at the top yet
 				return
 			}
@@ -1027,7 +1038,7 @@ export default {
 					block: 'center',
 					inline: 'nearest',
 				})
-				if (!smooth) {
+				if (this.$refs.scroller && !smooth) {
 					// scroll the viewport slightly further to make sure the element is about 1/3 from the top
 					this.$refs.scroller.scrollTop += this.$refs.scroller.offsetHeight / 4
 				}
@@ -1163,6 +1174,12 @@ export default {
 	}
 }
 
+.messages-list {
+  &__empty-content {
+    height: 100%;
+  }
+}
+
 .messages-group {
 	&__date {
 		display: block;
@@ -1173,7 +1190,7 @@ export default {
 	}
 
 	&__date-text {
-		margin-right: $clickable-area * 2;
+		margin-right: calc(var(--default-clickable-area) * 2);
 		content: attr(data-date);
 		padding: 4px 12px;
 		left: 50%;

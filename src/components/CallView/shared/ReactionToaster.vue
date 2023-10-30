@@ -28,7 +28,13 @@
 			:key="toast.seed"
 			class="toast"
 			:style="styled(toast.name, toast.seed)">
-			<span class="toast__reaction">
+			<img v-if="toast.reactionURL"
+				class="toast__reaction-img"
+				:src="toast.reactionURL"
+				:alt="toast.reaction"
+				width="34"
+				height="34">
+			<span v-else class="toast__reaction">
 				{{ toast.reaction }}
 			</span>
 			<span class="toast__name">
@@ -43,10 +49,26 @@ import Hex from 'crypto-js/enc-hex.js'
 import SHA1 from 'crypto-js/sha1.js'
 
 import { subscribe, unsubscribe } from '@nextcloud/event-bus'
+import { imagePath } from '@nextcloud/router'
 
 import usernameToColor from '@nextcloud/vue/dist/Functions/usernameToColor.js'
 
 import TransitionWrapper from '../../TransitionWrapper.vue'
+
+import { useGuestNameStore } from '../../../stores/guestName.js'
+
+const reactions = {
+	'❤️': 'Heart.gif',
+	'🎉': 'Party.gif',
+	'👏': 'Clap.gif',
+	'👍': 'Thumbs-up.gif',
+	'👎': 'Thumbs-down.gif',
+	'😂': 'Joy.gif',
+	'🤩': 'Star-struck.gif',
+	'🤔': 'Thinking-face.gif',
+	'😲': 'Surprised.gif',
+	'😥': 'Concerned.gif',
+}
 
 export default {
 	name: 'ReactionToaster',
@@ -77,6 +99,11 @@ export default {
 			type: Array,
 			required: true,
 		},
+	},
+
+	setup() {
+		const guestNameStore = useGuestNameStore()
+		return { guestNameStore }
 	},
 
 	data() {
@@ -146,8 +173,9 @@ export default {
 			this.reactionsQueue.push({
 				id: model.attributes.peerId,
 				reaction,
+				reactionURL: this.getReactionURL(reaction),
 				name: isLocalModel
-					? this.$store.getters.getDisplayName() || this.$store.getters.getGuestName()
+					? this.$store.getters.getDisplayName() || t('spreed', 'Guest')
 					: this.getParticipantName(model),
 				seed: Math.random(),
 			})
@@ -176,7 +204,13 @@ export default {
 				return participant.displayName
 			}
 
-			return this.$store.getters.getGuestName(this.token, Hex.stringify(SHA1(peerId)))
+			return this.guestNameStore.getGuestName(this.token, Hex.stringify(SHA1(peerId)))
+		},
+
+		getReactionURL(emoji) {
+			return reactions[emoji]
+				? imagePath('spreed', 'emojis/' + reactions[emoji])
+				: undefined
 		},
 
 		styled(name, seed) {
@@ -221,6 +255,10 @@ export default {
 		@media only screen and (max-width: 1920px) {
 			& {
 				font-size: 150%;
+			}
+			&-img {
+				width: 30px;
+				height: 30px;
 			}
 		}
 	}

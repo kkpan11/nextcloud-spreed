@@ -76,6 +76,8 @@ OC.L10N.register(
     "Password request: %s" : "Paroles pieprasījums: %s",
     "Private conversation" : "Privāta saruna",
     "Dismiss notification" : "Noraidīt paziņojumu",
+    "Accept" : "Pieņemt",
+    "Decline" : "Noraidīt",
     "{user} sent you a private message" : "{user} nosūtīja jums privātu ziņojumu",
     "{user} sent a message in conversation {call}" : "{user} nosūtīja ziņu sarunā {call}",
     "A deleted user sent a message in conversation {call}" : "Izdzēsts lietotājs nosūtīja ziņojumu sarunā {call}",
@@ -186,10 +188,10 @@ OC.L10N.register(
     "Upload" : "Augšupielādēt",
     "Files" : "Datnes",
     "File to share" : "Kopīgojamā datne",
-    "Dismiss" : "Atmest",
     "Reply" : "Atbildēt",
     "Go to file" : "Doties uz datni",
     "Translate" : "Tulkot",
+    "Dismiss" : "Atmest",
     "Contact" : "Kontakts",
     "Today" : "Šodien",
     "Yesterday" : "Vakar",
@@ -198,7 +200,6 @@ OC.L10N.register(
     "Group" : "Grupa",
     "New file" : "Jauns fails",
     "Settings" : "Iestatījumi",
-    "Send" : "Sūtīt",
     "Join" : "Pievienoties",
     "moderator" : "moderators",
     "guest" : "viesis",
@@ -253,6 +254,7 @@ OC.L10N.register(
     "iOS app" : "iOS lietotne",
     "Welcome to Nextcloud Talk!\nIn this conversation you will be informed about new features available in Nextcloud Talk." : "Esiet sveicināts Nextcloud Talk!\nŠajā sarunā jūs tiksit informēts par jaunām Nextcloud Talk iespējām.",
     "Please note that calls with more than 4 participants without external signaling server, participants can experience connectivity issues and cause high load on participating devices." : "Zvani, kuros ir vairāk nekā 4 dalībnieki bez ārējā paraksta servera, var saskarties ar savienojamības problēmām un radīt lielu slodzi iesaistītajām ierīcēm.",
-    "Conversation name" : "Sarunas nosaukums"
+    "Conversation name" : "Sarunas nosaukums",
+    "Send" : "Sūtīt"
 },
 "nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n != 0 ? 1 : 2);");

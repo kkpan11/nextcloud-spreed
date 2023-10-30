@@ -21,18 +21,18 @@
 
 <template>
 	<NcAppSettingsDialog :open.sync="showSettings"
-		:title="t('spreed', 'Talk settings')"
+		:name="t('spreed', 'Talk settings')"
 		:show-navigation="true"
 		first-selected-section="keyboard shortcuts"
 		:container="container">
 		<NcAppSettingsSection id="devices"
-			:title="t('spreed', 'Choose devices')"
+			:name="t('spreed', 'Choose devices')"
 			class="app-settings-section">
 			<MediaDevicesPreview />
 		</NcAppSettingsSection>
 		<NcAppSettingsSection v-if="!isGuest"
 			id="attachments"
-			:title="t('spreed', 'Attachments folder')"
+			:name="t('spreed', 'Attachments folder')"
 			class="app-settings-section">
 			<h3 class="app-settings-section__hint">
 				{{ locationHint }}
@@ -50,7 +50,7 @@
 		</NcAppSettingsSection>
 		<NcAppSettingsSection v-if="!isGuest"
 			id="privacy"
-			:title="t('spreed', 'Privacy')"
+			:name="t('spreed', 'Privacy')"
 			class="app-settings-section">
 			<NcCheckboxRadioSwitch id="read_status_privacy"
 				:checked="readStatusPrivacyIsPublic"
@@ -71,7 +71,7 @@
 			</NcCheckboxRadioSwitch>
 		</NcAppSettingsSection>
 		<NcAppSettingsSection id="sounds"
-			:title="t('spreed', 'Sounds')"
+			:name="t('spreed', 'Sounds')"
 			class="app-settings-section">
 			<NcCheckboxRadioSwitch id="play_sounds"
 				:checked="playSounds"
@@ -90,9 +90,20 @@
 				{{ t('spreed', 'Sounds for chat and call notifications can be adjusted in the personal settings.') }} ↗
 			</a>
 		</NcAppSettingsSection>
+		<NcAppSettingsSection id="performance"
+			:name="t('spreed', 'Performance')"
+			class="app-settings-section">
+			<NcCheckboxRadioSwitch id="blur-call-background"
+				:checked="isBackgroundBlurred"
+				type="switch"
+				class="checkbox"
+				@update:checked="toggleBackgroundBlurred">
+				{{ t('spreed', 'Blur background image in the call (may increase GPU load)') }}
+			</NcCheckboxRadioSwitch>
+		</NcAppSettingsSection>
 		<NcAppSettingsSection v-if="!disableKeyboardShortcuts"
 			id="shortcuts"
-			:title="t('spreed', 'Keyboard shortcuts')">
+			:name="t('spreed', 'Keyboard shortcuts')">
 			<em>{{ t('spreed', 'Speed up your Talk experience with these quick shortcuts.') }}</em>
 
 			<dl>
@@ -156,7 +167,7 @@
 <script>
 import { getCapabilities } from '@nextcloud/capabilities'
 import { getFilePickerBuilder, showError, showSuccess } from '@nextcloud/dialogs'
-import { subscribe, unsubscribe } from '@nextcloud/event-bus'
+import { emit, subscribe, unsubscribe } from '@nextcloud/event-bus'
 import { generateUrl } from '@nextcloud/router'
 
 import NcAppSettingsDialog from '@nextcloud/vue/dist/Components/NcAppSettingsDialog.js'
@@ -168,6 +179,7 @@ import NcTextField from '@nextcloud/vue/dist/Components/NcTextField.js'
 import MediaDevicesPreview from '../MediaDevicesPreview.vue'
 
 import { PRIVACY } from '../../constants.js'
+import BrowserStorage from '../../services/BrowserStorage.js'
 import { useSettingsStore } from '../../stores/settings.js'
 
 const supportTypingStatus = getCapabilities()?.spreed?.config?.chat?.['typing-privacy'] !== undefined
@@ -199,6 +211,7 @@ export default {
 			attachmentFolderLoading: true,
 			privacyLoading: false,
 			playSoundsLoading: false,
+			isBackgroundBlurred: true,
 		}
 	},
 
@@ -238,6 +251,15 @@ export default {
 		disableKeyboardShortcuts() {
 			return OCP.Accessibility.disableKeyboardShortcuts()
 		},
+	},
+
+	created() {
+		const blurred = BrowserStorage.getItem('background-blurred')
+		if (blurred === null) {
+			BrowserStorage.setItem('background-blurred', 'true')
+		}
+
+		this.isBackgroundBlurred = blurred !== 'false'
 	},
 
 	mounted() {
@@ -297,6 +319,12 @@ export default {
 				showError(t('spreed', 'Error while setting typing status privacy'))
 			}
 			this.privacyLoading = false
+		},
+
+		toggleBackgroundBlurred(value) {
+			this.isBackgroundBlurred = value
+			BrowserStorage.setItem('background-blurred', value)
+			emit('set-background-blurred', value)
 		},
 
 		async togglePlaySounds() {

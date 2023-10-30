@@ -27,8 +27,12 @@ namespace OCA\Talk\Chat;
 use DateInterval;
 use OC\Memcache\ArrayCache;
 use OC\Memcache\NullCache;
+use OCA\Talk\Events\BeforeChatMessageSentEvent;
+use OCA\Talk\Events\BeforeSystemMessageSentEvent;
 use OCA\Talk\Events\ChatEvent;
+use OCA\Talk\Events\ChatMessageSentEvent;
 use OCA\Talk\Events\ChatParticipantEvent;
+use OCA\Talk\Events\SystemMessageSentEvent;
 use OCA\Talk\Exceptions\ParticipantNotFoundException;
 use OCA\Talk\Model\Attendee;
 use OCA\Talk\Model\Poll;
@@ -65,10 +69,15 @@ use OCP\Share\IShare;
  * pending notifications are removed if the messages are deleted.
  */
 class ChatManager {
+	/** @deprecated */
 	public const EVENT_BEFORE_SYSTEM_MESSAGE_SEND = self::class . '::preSendSystemMessage';
+	/** @deprecated */
 	public const EVENT_AFTER_SYSTEM_MESSAGE_SEND = self::class . '::postSendSystemMessage';
+	/** @deprecated */
 	public const EVENT_AFTER_MULTIPLE_SYSTEM_MESSAGE_SEND = self::class . '::postSendMultipleSystemMessage';
+	/** @deprecated */
 	public const EVENT_BEFORE_MESSAGE_SEND = self::class . '::preSendMessage';
+	/** @deprecated */
 	public const EVENT_AFTER_MESSAGE_SEND = self::class . '::postSendMessage';
 
 	public const MAX_CHAT_LENGTH = 32000;
@@ -158,6 +167,8 @@ class ChatManager {
 
 		$this->setMessageExpiration($chat, $comment);
 
+		$event = new BeforeSystemMessageSentEvent($chat, $comment, skipLastActivityUpdate: $shouldSkipLastMessageUpdate);
+		$this->dispatcher->dispatchTyped($event);
 		$event = new ChatEvent($chat, $comment, $shouldSkipLastMessageUpdate);
 		$this->dispatcher->dispatch(self::EVENT_BEFORE_SYSTEM_MESSAGE_SEND, $event);
 		try {
@@ -185,6 +196,8 @@ class ChatManager {
 			}
 
 			$this->dispatcher->dispatch(self::EVENT_AFTER_SYSTEM_MESSAGE_SEND, $event);
+			$event = new SystemMessageSentEvent($chat, $comment, skipLastActivityUpdate: $shouldSkipLastMessageUpdate);
+			$this->dispatcher->dispatchTyped($event);
 		} catch (NotFoundException $e) {
 		}
 		$this->cache->remove($chat->getToken());
@@ -204,12 +217,14 @@ class ChatManager {
 	 * @return IComment
 	 */
 	public function addChangelogMessage(Room $chat, string $message): IComment {
-		$comment = $this->commentsManager->create(Attendee::ACTOR_GUESTS, 'changelog', 'chat', (string) $chat->getId());
+		$comment = $this->commentsManager->create(Attendee::ACTOR_GUESTS, Attendee::ACTOR_ID_CHANGELOG, 'chat', (string) $chat->getId());
 
 		$comment->setMessage($message, self::MAX_CHAT_LENGTH);
 		$comment->setCreationDateTime($this->timeFactory->getDateTime());
-		$comment->setVerb(self::VERB_MESSAGE); // Has to be comment, so it counts as unread message
+		$comment->setVerb(self::VERB_MESSAGE); // Has to be 'comment', so it counts as unread message
 
+		$event = new BeforeSystemMessageSentEvent($chat, $comment);
+		$this->dispatcher->dispatchTyped($event);
 		$event = new ChatEvent($chat, $comment);
 		$this->dispatcher->dispatch(self::EVENT_BEFORE_SYSTEM_MESSAGE_SEND, $event);
 		try {
@@ -220,6 +235,8 @@ class ChatManager {
 			$this->unreadCountCache->clear($chat->getId() . '-');
 
 			$this->dispatcher->dispatch(self::EVENT_AFTER_SYSTEM_MESSAGE_SEND, $event);
+			$event = new SystemMessageSentEvent($chat, $comment);
+			$this->dispatcher->dispatchTyped($event);
 		} catch (NotFoundException $e) {
 		}
 		$this->cache->remove($chat->getToken());
@@ -258,6 +275,8 @@ class ChatManager {
 		}
 		$this->setMessageExpiration($chat, $comment);
 
+		$event = new BeforeChatMessageSentEvent($chat, $comment, $participant, $silent);
+		$this->dispatcher->dispatchTyped($event);
 		if ($participant instanceof Participant) {
 			$event = new ChatParticipantEvent($chat, $comment, $participant, $silent);
 		} else {
@@ -274,7 +293,9 @@ class ChatManager {
 			}
 
 			// Update last_message
-			if ($comment->getActorType() !== Attendee::ACTOR_BOTS || $comment->getActorId() === 'changelog' || str_starts_with($comment->getActorId(), Attendee::ACTOR_BOT_PREFIX)) {
+			if ($comment->getActorType() !== Attendee::ACTOR_BOTS
+				|| $comment->getActorId() === Attendee::ACTOR_ID_CHANGELOG
+				|| str_starts_with($comment->getActorId(), Attendee::ACTOR_BOT_PREFIX)) {
 				$this->roomService->setLastMessage($chat, $comment);
 				$this->unreadCountCache->clear($chat->getId() . '-');
 			} else {
@@ -300,6 +321,8 @@ class ChatManager {
 			$this->notifier->notifyOtherParticipant($chat, $comment, $alreadyNotifiedUsers, $silent);
 
 			$this->dispatcher->dispatch(self::EVENT_AFTER_MESSAGE_SEND, $event);
+			$event = new ChatMessageSentEvent($chat, $comment, $participant, $silent);
+			$this->dispatcher->dispatchTyped($event);
 		} catch (NotFoundException $e) {
 		}
 		$this->cache->remove($chat->getToken());

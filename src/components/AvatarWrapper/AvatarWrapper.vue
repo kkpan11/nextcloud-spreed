@@ -2,8 +2,9 @@
   - @copyright Copyright (c) 2020 Marco Ambrosini <marcoambrosini@icloud.com>
   -
   - @author Marco Ambrosini <marcoambrosini@icloud.com>
+  - @author Maksim Sukharev <antreesy.web@gmail.com>
   -
-  - @license GNU AGPL version 3 or any later version
+  - @license AGPL-3.0-or-later
   -
   - This program is free software: you can redistribute it and/or modify
   - it under the terms of the GNU Affero General Public License as
@@ -20,27 +21,19 @@
 -->
 
 <template>
-	<div class="avatar-wrapper"
-		:class="{
-			'avatar-wrapper--offline': offline,
-			'avatar-wrapper--small': small,
-			'avatar-wrapper--condensed': condensed,
-			'avatar-wrapper--highlighted': highlighted,
-		}"
-		:style="{'--condensed-overlap': condensedOverlap}">
-		<div v-if="iconClass"
-			class="icon"
-			:class="[`avatar-${size}px`, iconClass]" />
-		<div v-else-if="isGuest || isDeletedUser"
-			class="guest"
-			:class="`avatar-${size}px`">
+	<div class="avatar-wrapper" :class="avatarClass" :style="avatarStyle">
+		<div v-if="iconClass" class="avatar icon" :class="[iconClass]" />
+		<div v-else-if="isGuest || isDeletedUser" class="avatar guest">
 			{{ firstLetterOfGuestName }}
 		</div>
+		<div v-else-if="isBot" class="avatar bot">
+			{{ '>_' }}
+		</div>
 		<NcAvatar v-else
+			:key="id"
 			:user="id"
 			:display-name="name"
 			:menu-container="menuContainerWithFallback"
-			menu-position="left"
 			:disable-tooltip="disableTooltip"
 			:disable-menu="isDisabledMenu"
 			:show-user-status="showUserStatus"
@@ -52,6 +45,8 @@
 
 <script>
 import NcAvatar from '@nextcloud/vue/dist/Components/NcAvatar.js'
+
+import { ATTENDEE, AVATAR } from '../../constants.js'
 
 export default {
 
@@ -74,9 +69,9 @@ export default {
 			type: String,
 			default: null,
 		},
-		small: {
-			type: Boolean,
-			default: false,
+		size: {
+			type: Number,
+			default: AVATAR.SIZE.DEFAULT,
 		},
 		condensed: {
 			type: Boolean,
@@ -120,19 +115,47 @@ export default {
 		},
 	},
 	computed: {
-		size() {
-			return this.small ? 22 : 44
-		},
 		// Determines which icon is displayed
 		iconClass() {
-			if (!this.source || this.source === 'users' || this.isGuest || this.isDeletedUser) {
+			if (!this.source || this.isUser || this.isBot || this.isGuest || this.isDeletedUser) {
 				return ''
+			}
+			if (this.isRemoteUser) {
+				return 'icon-user'
 			}
 			if (this.source === 'emails') {
 				return 'icon-mail'
 			}
+			if (this.source === 'phones') {
+				return 'icon-phone'
+			}
+			if (this.source === 'bots' && this.id === 'changelog') {
+				return 'icon-changelog'
+			}
 			// source: groups, circles
 			return 'icon-contacts'
+		},
+		avatarClass() {
+			return {
+				'avatar-wrapper--offline': this.offline,
+				'avatar-wrapper--condensed': this.condensed,
+				'avatar-wrapper--highlighted': this.highlighted,
+			}
+		},
+		avatarStyle() {
+			return {
+				'--avatar-size': this.size + 'px',
+				'--condensed-overlap': this.condensedOverlap,
+			}
+		},
+		isUser() {
+			return this.source === 'users' || this.source === ATTENDEE.ACTOR_TYPE.BRIDGED
+		},
+		isRemoteUser() {
+			return this.source === 'federated_users'
+		},
+		isBot() {
+			return this.source === 'bots' && this.id !== 'changelog'
 		},
 		isGuest() {
 			return this.source === 'guests'
@@ -160,19 +183,39 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../../assets/avatar.scss';
-
 .avatar-wrapper {
-	height: 44px;
-	width: 44px;
-	border-radius: 44px;
-	@include avatar-mixin(44px);
+	height: var(--avatar-size);
+	width: var(--avatar-size);
+	border-radius: var(--avatar-size);
 
-	&--small {
-		height: 22px;
-		width: 22px;
-		border-radius: 22px;
-		@include avatar-mixin(22px);
+	.avatar {
+		position: sticky;
+		top: 0;
+		width: var(--avatar-size);
+		height: var(--avatar-size);
+		line-height: var(--avatar-size);
+		font-size: calc(var(--avatar-size) / 2);
+		border-radius: 50%;
+
+		&.icon {
+			background-color: var(--color-background-darker);
+			background-size: calc(var(--avatar-size) / 2);
+		}
+
+		&.bot {
+			padding-left: 5px;
+			background-color: var(--color-background-darker);
+		}
+
+		&.guest {
+			color: #ffffff;
+			background-color: #b9b9b9;
+			padding: 0;
+			display: block;
+			text-align: center;
+			margin-left: auto;
+			margin-right: auto;
+		}
 	}
 
 	&--condensed {

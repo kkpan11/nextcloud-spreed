@@ -28,7 +28,7 @@
 					:key="index"
 					:name="participant.displayName"
 					:source="participant.actorType"
-					small
+					:size="AVATAR.SIZE.EXTRA_SMALL"
 					condensed
 					:condensed-overlap="8"
 					disable-menu
@@ -45,6 +45,9 @@ import escapeHtml from 'escape-html'
 
 import AvatarWrapper from '../AvatarWrapper/AvatarWrapper.vue'
 
+import { AVATAR } from '../../constants.js'
+import { useGuestNameStore } from '../../stores/guestName.js'
+
 export default {
 	name: 'NewMessageTypingIndicator',
 	components: { AvatarWrapper },
@@ -57,6 +60,11 @@ export default {
 			type: String,
 			required: true,
 		},
+	},
+
+	setup() {
+		const guestNameStore = useGuestNameStore()
+		return { AVATAR, guestNameStore }
 	},
 
 	computed: {
@@ -131,7 +139,7 @@ export default {
 				return participant.displayName
 			}
 
-			return this.$store.getters.getGuestName(this.token, participant.actorId)
+			return this.guestNameStore.getGuestName(this.token, participant.actorId)
 		},
 	},
 }

@@ -24,6 +24,14 @@ export const SIGNALING = {
 		CLUSTER_CONVERSATION: 'conversation_cluster',
 	},
 }
+
+export const SESSION = {
+	STATE: {
+		INACTIVE: 0,
+		ACTIVE: 1,
+	},
+}
+
 export const CHAT = {
 	FETCH_LIMIT: 100,
 	MINIMUM_VISIBLE: 5,
@@ -37,6 +45,11 @@ export const CALL = {
 		VIDEO_STARTING: 3,
 		AUDIO_STARTING: 4,
 		FAILED: 5,
+	},
+	RECORDING_CONSENT: {
+		OFF: 0,
+		REQUIRED: 1,
+		OPTIONAL: 2,
 	},
 }
 
@@ -64,6 +77,7 @@ export const CONVERSATION = {
 		PUBLIC: 3,
 		CHANGELOG: 4,
 		ONE_TO_ONE_FORMER: 5,
+		NOTE_TO_SELF: 6,
 	},
 
 	BREAKOUT_ROOM_MODE: {
@@ -81,6 +95,15 @@ export const CONVERSATION = {
 		STATUS_ASSISTANCE_RESET: 0,
 		STATUS_ASSISTANCE_REQUESTED: 2,
 	},
+
+	OBJECT_TYPE: {
+		EMAIL: 'emails',
+		FILE: 'file',
+		PHONE: 'phone',
+		VIDEO_VERIFICATION: 'share:password',
+		BREAKOUT_ROOM: 'room',
+		DEFAULT: '',
+	}
 }
 export const ATTENDEE = {
 	ACTOR_TYPE: {
@@ -91,6 +114,8 @@ export const ATTENDEE = {
 		CIRCLES: 'circles',
 		BOTS: 'bots',
 		BRIDGED: 'bridged',
+		FEDERATED_USERS: 'federated_users',
+		PHONES: 'phones',
 	},
 
 	BRIDGE_BOT_ID: 'bridge-bot',
@@ -111,6 +136,12 @@ export const PARTICIPANT = {
 		MUTE_SPEAKER: 2,
 		SPEAKING: 4,
 		RAISE_HAND: 8,
+	},
+
+	SIP_DIALOUT_FLAG: {
+		NONE: 0,
+		MUTE_MICROPHONE: 1,
+		MUTE_SPEAKER: 2,
 	},
 
 	NOTIFY: {
@@ -222,5 +253,17 @@ export const BOT = {
 		DISABLED: 0,
 		ENABLED: 1,
 		NO_SETUP: 2,
+	},
+}
+
+export const AVATAR = {
+	SIZE: {
+		EXTRA_SMALL: 22,
+		SMALL: 32,
+		DEFAULT: 44,
+		MEDIUM: 64,
+		LARGE: 128,
+		EXTRA_LARGE: 180,
+		FULL: 512,
 	},
 }

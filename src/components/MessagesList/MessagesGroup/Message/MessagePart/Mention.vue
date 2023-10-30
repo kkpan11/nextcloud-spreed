@@ -20,28 +20,17 @@
 -->
 
 <template>
-	<div class="mention">
-		<NcUserBubble v-if="isMentionToAll"
+	<span ref="mention" class="mention">
+		<NcUserBubble v-if="size"
 			:display-name="name"
 			:avatar-image="avatarUrl"
-			:primary="true" />
-		<NcUserBubble v-else-if="isGroupMention"
-			:display-name="name"
-			:avatar-image="'icon-group-forced-white'"
-			:primary="isCurrentUserGroup" />
-		<NcUserBubble v-else-if="isMentionToGuest"
-			:display-name="name"
-			:avatar-image="'icon-user-forced-white'"
-			:primary="isCurrentGuest" />
-		<NcUserBubble v-else
-			:display-name="name"
 			:user="id"
-			:primary="isCurrentUser" />
-	</div>
+			:size="size"
+			:primary="primary" />
+	</span>
 </template>
 
 <script>
-
 import { loadState } from '@nextcloud/initial-state'
 import { generateOcsUrl } from '@nextcloud/router'
 
@@ -69,6 +58,16 @@ export default {
 			type: String,
 			required: true,
 		},
+		server: {
+			type: String,
+			default: '',
+		},
+	},
+
+	data() {
+		return {
+			size: null,
+		}
 	},
 
 	computed: {
@@ -81,6 +80,9 @@ export default {
 		isMentionToGuest() {
 			return this.type === 'guest'
 		},
+		isRemoteUser() {
+			return this.type === 'user' && this.server !== ''
+		},
 		isCurrentGuest() {
 			// On mention bubbles the id is actually "guest/ACTOR_ID" for guests
 			// This is to make sure guests can never collide with users,
@@ -91,6 +93,11 @@ export default {
 				&& this.id === ('guest/' + this.$store.getters.getActorId())
 		},
 		isCurrentUser() {
+			if (this.isRemoteUser) {
+				// For now, we don't highlight remote users even if they are the one
+				return false
+			}
+
 			return this.$store.getters.getActorType() === 'users'
 				&& this.id === this.$store.getters.getUserId()
 		},
@@ -98,12 +105,29 @@ export default {
 			return this.isGroupMention
 				&& loadState('spreed', 'user_group_ids', []).includes(this.id)
 		},
+		primary() {
+			return this.isMentionToAll || this.isCurrentUser
+				|| (this.isGroupMention && this.isCurrentUserGroup)
+				|| (this.isMentionToGuest && this.isCurrentGuest)
+		},
 		avatarUrl() {
+			if (this.isGroupMention) {
+				return 'icon-group-forced-white'
+			} else if (this.isMentionToGuest || this.isRemoteUser) {
+				return 'icon-user-forced-white'
+			} else if (!this.isMentionToAll) {
+				return undefined
+			}
+
 			return generateOcsUrl('apps/spreed/api/v1/room/{token}/avatar' + (isDarkTheme ? '/dark' : ''), {
 				token: this.id,
 			})
 		},
 	},
+
+	mounted() {
+		this.size = parseInt(window.getComputedStyle(this.$refs.mention).fontSize, 10) * 4 / 3 ?? 20
+	}
 }
 </script>
 

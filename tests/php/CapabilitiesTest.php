@@ -38,7 +38,6 @@ use OCP\IConfig;
 use OCP\IUser;
 use OCP\IUserSession;
 use OCP\Translation\ITranslationManager;
-use OCP\Translation\LanguageTuple;
 use PHPUnit\Framework\MockObject\MockObject;
 use Test\TestCase;
 
@@ -140,6 +139,11 @@ class CapabilitiesTest extends TestCase {
 			'remind-me-later',
 			'bots-v1',
 			'markdown-messages',
+			'media-caption',
+			'session-state',
+			'note-to-self',
+			'recording-consent',
+			'sip-support-dialout',
 			'message-expiration',
 			'reactions',
 		];
@@ -189,7 +193,10 @@ class CapabilitiesTest extends TestCase {
 						'enabled' => true,
 						'breakout-rooms' => false,
 						'recording' => false,
+						'recording-consent' => 0,
 						'supported-reactions' => ['❤️', '🎉', '👏', '👍', '👎', '😂', '🤩', '🤔', '😲', '😥'],
+						'sip-enabled' => false,
+						'sip-dialout-enabled' => false,
 						'predefined-backgrounds' => [
 							'1_office.jpg',
 							'2_home.jpg',
@@ -201,11 +208,12 @@ class CapabilitiesTest extends TestCase {
 							'8_space_station.jpg',
 						],
 						'can-upload-background' => false,
+						'can-enable-sip' => false,
 					],
 					'chat' => [
 						'max-length' => 32000,
 						'read-privacy' => 0,
-						'translations' => [],
+						'has-translation-providers' => false,
 						'typing-privacy' => 0,
 					],
 					'conversations' => [
@@ -223,7 +231,7 @@ class CapabilitiesTest extends TestCase {
 		], $capabilities->getCapabilities());
 	}
 
-	public function dataGetCapabilitiesUserAllowed(): array {
+	public static function dataGetCapabilitiesUserAllowed(): array {
 		return [
 			[true, false, 'none', true, Participant::PRIVACY_PRIVATE],
 			[false, true, '1 MB', true, Participant::PRIVACY_PUBLIC],
@@ -313,7 +321,10 @@ class CapabilitiesTest extends TestCase {
 						'enabled' => false,
 						'breakout-rooms' => true,
 						'recording' => false,
+						'recording-consent' => 0,
 						'supported-reactions' => ['❤️', '🎉', '👏', '👍', '👎', '😂', '🤩', '🤔', '😲', '😥'],
+						'sip-enabled' => false,
+						'sip-dialout-enabled' => false,
 						'predefined-backgrounds' => [
 							'1_office.jpg',
 							'2_home.jpg',
@@ -325,11 +336,12 @@ class CapabilitiesTest extends TestCase {
 							'8_space_station.jpg',
 						],
 						'can-upload-background' => $canUpload,
+						'can-enable-sip' => false,
 					],
 					'chat' => [
 						'max-length' => 32000,
 						'read-privacy' => $readPrivacy,
-						'translations' => [],
+						'has-translation-providers' => false,
 						'typing-privacy' => 0,
 					],
 					'conversations' => [
@@ -428,7 +440,7 @@ class CapabilitiesTest extends TestCase {
 		$this->assertEquals($data['spreed']['config']['call']['recording'], $enabled);
 	}
 
-	public function dataTestConfigRecording(): array {
+	public static function dataTestConfigRecording(): array {
 		return [
 			[true],
 			[false],
@@ -446,17 +458,10 @@ class CapabilitiesTest extends TestCase {
 			$this->cacheFactory,
 		);
 
-		$translations = [];
-		$translations[] = new LanguageTuple('de', 'de Label', 'en', 'en Label');
-		$translations[] = new LanguageTuple('de_DE', 'de_DE Label', 'en', 'en Label');
-
-		$this->translationManager->method('getLanguages')
-			->willReturn($translations);
+		$this->translationManager->method('hasProviders')
+			->willReturn(true);
 
 		$data = json_decode(json_encode($capabilities->getCapabilities(), JSON_THROW_ON_ERROR), true);
-		$this->assertEquals([
-			['from' => 'de', 'fromLabel' => 'de Label', 'to' => 'en', 'toLabel' => 'en Label'],
-			['from' => 'de_DE', 'fromLabel' => 'de_DE Label', 'to' => 'en', 'toLabel' => 'en Label'],
-		], $data['spreed']['config']['chat']['translations']);
+		$this->assertEquals(true, $data['spreed']['config']['chat']['has-translation-providers']);
 	}
 }

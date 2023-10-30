@@ -381,6 +381,14 @@ class Listener implements IEventListener {
 		}
 		$metaData['mimeType'] = $share->getNode()->getMimeType();
 
+		if (isset($metaData['caption'])) {
+			if (is_string($metaData['caption']) && trim($metaData['caption']) !== '') {
+				$metaData['caption'] = trim($metaData['caption']);
+			} else {
+				unset($metaData['caption']);
+			}
+		}
+
 		$listener->sendSystemMessage($room, 'file_shared', ['share' => $share->getId(), 'metaData' => $metaData]);
 	}
 
@@ -400,6 +408,8 @@ class Listener implements IEventListener {
 				$this->sendSystemMessage($event->getRoom(), 'circle_added', ['circle' => $attendee->getActorId()]);
 			} elseif ($attendee->getActorType() === Attendee::ACTOR_FEDERATED_USERS) {
 				$this->sendSystemMessage($event->getRoom(), 'federated_user_added', ['federated_user' => $attendee->getActorId()]);
+			} elseif ($attendee->getActorType() === Attendee::ACTOR_PHONES) {
+				$this->sendSystemMessage($event->getRoom(), 'phone_added', ['phone' => $attendee->getActorId(), 'name' => $attendee->getDisplayName()]);
 			}
 		}
 	}
@@ -412,6 +422,8 @@ class Listener implements IEventListener {
 				$this->sendSystemMessage($event->getRoom(), 'circle_removed', ['circle' => $attendee->getActorId()]);
 			} elseif ($attendee->getActorType() === Attendee::ACTOR_FEDERATED_USERS) {
 				$this->sendSystemMessage($event->getRoom(), 'federated_user_removed', ['federated_user' => $attendee->getActorId()]);
+			} elseif ($attendee->getActorType() === Attendee::ACTOR_PHONES) {
+				$this->sendSystemMessage($event->getRoom(), 'phone_removed', ['phone' => $attendee->getActorId(), 'name' => $attendee->getDisplayName()]);
 			}
 		}
 	}
@@ -427,7 +439,7 @@ class Listener implements IEventListener {
 				$actorId = $user->getUID();
 			} elseif (\OC::$CLI || $this->session->exists('talk-overwrite-actor-cli')) {
 				$actorType = Attendee::ACTOR_GUESTS;
-				$actorId = 'cli';
+				$actorId = Attendee::ACTOR_ID_CLI;
 			} elseif ($this->session->exists('talk-overwrite-actor-type')) {
 				$actorType = $this->session->get('talk-overwrite-actor-type');
 				$actorId = $this->session->get('talk-overwrite-actor-id');

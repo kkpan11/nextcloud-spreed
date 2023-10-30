@@ -5,6 +5,7 @@
 	findUnusedBaselineEntry="true"
 	findUnusedCode="false"
 	resolveFromConfigFile="true"
+	phpVersion="8.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xmlns="https://getpsalm.org/schema/config"
 	xsi:schemaLocation="https://getpsalm.org/schema/config vendor-bin/psalm/vendor/vimeo/psalm/config.xsd"
@@ -16,6 +17,10 @@
 			<directory name="vendor" />
 		</ignoreFiles>
 	</projectFiles>
+	<extraFiles>
+		<directory name="lib/Vendor" />
+		<directory name="vendor" />
+	</extraFiles>
 	<issueHandlers>
 		<LessSpecificReturnStatement errorLevel="error"/>
 		<LessSpecificReturnType errorLevel="error"/>
@@ -27,8 +32,7 @@
 				<referencedClass name="Doctrine\DBAL\Exception\InvalidFieldNameException" />
 				<referencedClass name="Doctrine\DBAL\Exception\TableNotFoundException" />
 				<referencedClass name="Doctrine\DBAL\Exception\UniqueConstraintViolationException" />
-				<referencedClass name="Doctrine\DBAL\Platforms\PostgreSQL94Platform" />
-				<referencedClass name="Doctrine\DBAL\Types\Types" />
+				<referencedClass name="Doctrine\DBAL\Platforms\PostgreSQLPlatform" />
 				<referencedClass name="GuzzleHttp\Exception\ClientException" />
 				<referencedClass name="GuzzleHttp\Exception\ServerException" />
 				<referencedClass name="GuzzleHttp\Exception\ConnectException" />
@@ -85,6 +89,9 @@
 		<file name="tests/stubs/oc_comments_manager.php" />
 		<file name="tests/stubs/oc_core_command_base.php" />
 		<file name="tests/stubs/oc_hooks_emitter.php" />
+		<file name="tests/stubs/oc_http_client_response.php" />
+		<file name="tests/stubs/oca_circles.php" />
+		<file name="tests/stubs/oca_files_events.php" />
 		<file name="tests/stubs/GuzzleHttp_Exception_ClientException.php" />
 		<file name="tests/stubs/GuzzleHttp_Exception_ConnectException.php" />
 		<file name="tests/stubs/GuzzleHttp_Exception_ServerException.php" />

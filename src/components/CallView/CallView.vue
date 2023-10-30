@@ -21,7 +21,7 @@
 -->
 
 <template>
-	<div id="call-container">
+	<div id="call-container" :class="{ 'blurred': isBackgroundBlurred }">
 		<ViewerOverlayCallView v-if="isViewerOverlay"
 			:token="token"
 			:model="promotedParticipantModel"
@@ -66,6 +66,32 @@
 									:call-participant-model="callParticipantModel"
 									:shared-data="sharedDatas[shownRemoteScreenPeerId]"
 									:is-big="true" />
+								<!-- presenter overlay -->
+								<TransitionWrapper v-if="shouldShowPresenterOverlay(callParticipantModel)"
+									:key="'presenter-overlay-video' + callParticipantModel.attributes.peerId"
+									name="slide-down">
+									<VideoVue :key="'video-overlay-' + callParticipantModel.attributes.peerId"
+										class="presenter-overlay__video"
+										:token="token"
+										:model="callParticipantModel"
+										:shared-data="sharedDatas[shownRemoteScreenPeerId]"
+										is-presenter-overlay
+										un-selectable
+										hide-bottom-bar
+										@click-video="toggleShowPresenterOverlay" />
+								</TransitionWrapper>
+								<!-- presenter button when presenter overlay is collapsed -->
+								<NcButton v-else-if="isPresenterCollapsed(callParticipantModel)"
+									:key="'presenter-overlay-button' + callParticipantModel.attributes.peerId"
+									:aria-label="t('spreed', 'Show presenter')"
+									:title="t('spreed', 'Show presenter')"
+									class="presenter-overlay--collapse"
+									type="tertiary-no-background"
+									@click="toggleShowPresenterOverlay">
+									<template #icon>
+										<AccountBox fill-color="#ffffff" :size="20" />
+									</template>
+								</NcButton>
 							</template>
 						</template>
 					</div>
@@ -153,6 +179,8 @@ import { showMessage } from '@nextcloud/dialogs'
 import { subscribe, unsubscribe } from '@nextcloud/event-bus'
 import { loadState } from '@nextcloud/initial-state'
 
+import AccountBox from 'vue-material-design-icons/AccountBoxOutline.vue'
+
 import Grid from './Grid/Grid.vue'
 import EmptyCallView from './shared/EmptyCallView.vue'
 import LocalVideo from './shared/LocalVideo.vue'
@@ -160,24 +188,30 @@ import ReactionToaster from './shared/ReactionToaster.vue'
 import Screen from './shared/Screen.vue'
 import VideoVue from './shared/VideoVue.vue'
 import ViewerOverlayCallView from './shared/ViewerOverlayCallView.vue'
+import TransitionWrapper from '../TransitionWrapper.vue'
 
 import { SIMULCAST } from '../../constants.js'
+import BrowserStorage from '../../services/BrowserStorage.js'
 import { fetchPeers } from '../../services/callsService.js'
 import { EventBus } from '../../services/EventBus.js'
 import { localMediaModel, localCallParticipantModel, callParticipantCollection } from '../../utils/webrtc/index.js'
+import NcButton from '@nextcloud/vue/dist/Components/NcButton.js'
 import RemoteVideoBlocker from '../../utils/webrtc/RemoteVideoBlocker.js'
 
 export default {
 	name: 'CallView',
 
 	components: {
+		AccountBox,
 		EmptyCallView,
 		ViewerOverlayCallView,
 		Grid,
 		LocalVideo,
+		NcButton,
 		ReactionToaster,
 		Screen,
 		VideoVue,
+		TransitionWrapper,
 	},
 
 	props: {
@@ -212,6 +246,8 @@ export default {
 				screenVisible: true,
 			},
 			callParticipantCollection,
+			isBackgroundBlurred: true,
+			showPresenterOverlay: true,
 		}
 	},
 	computed: {
@@ -360,6 +396,11 @@ export default {
 		supportedReactions() {
 			return getCapabilities()?.spreed?.config?.call?.['supported-reactions']
 		},
+
+		presenterVideoBlockerEnabled() {
+			return this.sharedDatas[this.shownRemoteScreenPeerId]?.remoteVideoBlocker?.isVideoEnabled()
+		},
+
 	},
 	watch: {
 		'localCallParticipantModel.attributes.peerId'(newValue, previousValue) {
@@ -434,11 +475,16 @@ export default {
 				this.$store.dispatch('setCallViewMode', { isGrid: false })
 			}
 		},
+
+		presenterVideoBlockerEnabled(value) {
+			this.showPresenterOverlay = value
+		},
 	},
 	created() {
 		// Ensure that data is properly initialized before mounting the
 		// subviews.
 		this.updateDataFromCallParticipantModels(this.callParticipantModels)
+		this.isBackgroundBlurred = BrowserStorage.getItem('background-blurred') !== 'false'
 	},
 	mounted() {
 		EventBus.$on('refresh-peer-list', this.debounceFetchPeers)
@@ -446,6 +492,7 @@ export default {
 		callParticipantCollection.on('remove', this._lowerHandWhenParticipantLeaves)
 
 		subscribe('switch-screen-to-id', this._switchScreenToId)
+		subscribe('set-background-blurred', this.setBackgroundBlurred)
 	},
 	beforeDestroy() {
 		EventBus.$off('refresh-peer-list', this.debounceFetchPeers)
@@ -453,6 +500,7 @@ export default {
 		callParticipantCollection.off('remove', this._lowerHandWhenParticipantLeaves)
 
 		unsubscribe('switch-screen-to-id', this._switchScreenToId)
+		unsubscribe('set-background-blurred', this.setBackgroundBlurred)
 	},
 	methods: {
 		/**
@@ -704,6 +752,32 @@ export default {
 				callParticipantModel.setSimulcastVideoQuality(SIMULCAST.LOW)
 			}
 		},
+
+		setBackgroundBlurred(value) {
+			this.isBackgroundBlurred = value
+		},
+
+		isPresenterCollapsed(callParticipantModel) {
+			return (callParticipantModel.attributes.peerId === this.shownRemoteScreenPeerId
+				&& !this.showPresenterOverlay
+				&& callParticipantModel.attributes.videoAvailable)
+
+		},
+
+		shouldShowPresenterOverlay(callParticipantModel) {
+			return callParticipantModel.attributes.peerId === this.shownRemoteScreenPeerId
+				&& this.showPresenterOverlay
+				&& this.callParticipantModelsWithVideo.includes(callParticipantModel)
+
+		},
+
+		toggleShowPresenterOverlay() {
+			if (!this.presenterVideoBlockerEnabled) {
+				this.sharedDatas[this.shownRemoteScreenPeerId].remoteVideoBlocker.setVideoEnabled(true)
+			} else {
+				this.showPresenterOverlay = !this.showPresenterOverlay
+			}
+		},
 	},
 }
 </script>
@@ -722,7 +796,39 @@ export default {
 	width: 100%;
 	height: 100%;
 	background-color: $color-call-background;
-	backdrop-filter: blur(25px);
+
+	&.blurred {
+		backdrop-filter: blur(25px);
+	}
+}
+
+.presenter-overlay__video {
+	position: absolute;
+	bottom: 48px;
+	right: 8px;
+	--max-size: 242px;
+	width: 10vw;
+	height: 10vw;
+	max-width: var(--max-size);
+	max-height: var(--max-size);
+	z-index: 10;
+}
+
+.presenter-overlay--collapse {
+	position : absolute !important;
+	opacity: .7;
+	bottom: 48px;
+	right: 0;
+
+	#call-container:hover & {
+		background-color: rgba(0, 0, 0, 0.1) !important;
+
+		&:hover,
+		&:focus {
+			opacity: 1;
+			background-color: rgba(0, 0, 0, 0.2) !important;
+		}
+	}
 }
 
 #videos {

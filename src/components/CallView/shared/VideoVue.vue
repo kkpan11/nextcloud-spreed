@@ -1,7 +1,7 @@
 <!--
   - @copyright Copyright (c) 2019, Daniel Calviño Sánchez (danxuliu@gmail.com)
   -
-  - @license GNU AGPL version 3 or any later version
+  - @license AGPL-3.0-or-later
   -
   - This program is free software: you can redistribute it and/or modify
   - it under the terms of the GNU Affero General Public License as
@@ -22,8 +22,12 @@
 	<div v-show="!placeholderForPromoted || sharedData.promoted"
 		:id="(placeholderForPromoted ? 'placeholder-' : '') + 'container_' + peerId + '_video_incoming'"
 		ref="videoContainer"
-		class="videoContainer"
-		:class="containerClass"
+		class="video-container"
+		:class="[containerClass, {
+			speaking: isSpeaking && !isBig,
+			hover: mouseover && !unSelectable && !isBig,
+			presenter: isPresenterOverlay && mouseover
+		}]"
 		@mouseover="showShadow"
 		@mouseleave="hideShadow"
 		@click="handleClickVideo">
@@ -50,33 +54,21 @@
 			<div v-if="showBackgroundAndAvatar"
 				:key="'backgroundAvatar'"
 				class="avatar-container">
-				<template v-if="participantUserId">
-					<VideoBackground :display-name="participantName"
-						:user="participantUserId" />
-					<NcAvatar :size="avatarSize"
-						:disable-menu="true"
-						:disable-tooltip="true"
-						:user="participantUserId"
-						:display-name="participantName"
-						:show-user-status="false"
-						:class="avatarClass" />
-				</template>
-				<template v-else>
-					<VideoBackground :display-name="participantName" />
-					<div :class="guestAvatarClass"
-						class="avatar guest">
-						{{ firstLetterOfGuestName }}
-					</div>
-				</template>
+				<VideoBackground :display-name="participantName" :user="participantUserId" />
+				<AvatarWrapper :id="participantUserId"
+					:name="participantName"
+					:source="participantActorType"
+					:size="avatarSize"
+					disable-menu
+					disable-tooltip
+					:class="avatarClass" />
 			</div>
 		</TransitionWrapper>
 		<TransitionWrapper name="fade">
 			<div v-if="showPlaceholderForPromoted"
 				:key="'placeholderForPromoted'"
 				class="placeholder-for-promoted">
-				<AccountCircle v-if="isPromoted || isSelected"
-					fill-color="#FFFFFF"
-					:size="36" />
+				<AccountCircle v-if="isPromoted || isSelected" fill-color="#FFFFFF" :size="64" />
 			</div>
 		</TransitionWrapper>
 		<div v-if="connectionMessage"
@@ -89,8 +81,7 @@
 				:has-shadow="hasVideo"
 				:participant-name="participantName" />
 		</slot>
-		<div v-if="isSpeaking && !isStripe && !isBig" class="speaking-shadow" />
-		<div v-if="!unSelectable && mouseover && !isBig" class="hover-shadow" />
+		<AccountOff v-if="isPresenterOverlay && mouseover" class="presenter-icon__hide" :size="30" />
 	</div>
 </template>
 
@@ -100,17 +91,18 @@ import Hex from 'crypto-js/enc-hex.js'
 import SHA1 from 'crypto-js/sha1.js'
 
 import AccountCircle from 'vue-material-design-icons/AccountCircle.vue'
+import AccountOff from 'vue-material-design-icons/AccountOff.vue'
 
-import NcAvatar from '@nextcloud/vue/dist/Components/NcAvatar.js'
-
+import AvatarWrapper from '../../AvatarWrapper/AvatarWrapper.vue'
 import TransitionWrapper from '../../TransitionWrapper.vue'
 import Screen from './Screen.vue'
 import VideoBackground from './VideoBackground.vue'
 import VideoBottomBar from './VideoBottomBar.vue'
 
-import { ATTENDEE } from '../../../constants.js'
+import { ATTENDEE, AVATAR } from '../../../constants.js'
 import video from '../../../mixins/video.js'
 import { EventBus } from '../../../services/EventBus.js'
+import { useGuestNameStore } from '../../../stores/guestName.js'
 import { ConnectionState } from '../../../utils/webrtc/models/CallParticipantModel.js'
 
 export default {
@@ -118,12 +110,14 @@ export default {
 	name: 'VideoVue',
 
 	components: {
-		NcAvatar,
+		AvatarWrapper,
 		TransitionWrapper,
 		VideoBackground,
-		AccountCircle,
 		Screen,
 		VideoBottomBar,
+		// icons
+		AccountCircle,
+		AccountOff,
 	},
 
 	mixins: [video],
@@ -149,6 +143,16 @@ export default {
 			type: Boolean,
 			default: true,
 		},
+		isGrid: {
+			type: Boolean,
+			default: false,
+		},
+
+		isPresenterOverlay: {
+			type: Boolean,
+			default: false,
+		},
+
 		// True if this video component is used in the promoted view's video stripe
 		isStripe: {
 			type: Boolean,
@@ -187,6 +191,11 @@ export default {
 		},
 	},
 
+	setup() {
+		const guestNameStore = useGuestNameStore()
+		return { guestNameStore }
+	},
+
 	data() {
 		return {
 			videoAspectRatio: null,
@@ -196,9 +205,8 @@ export default {
 	},
 
 	computed: {
-
 		videoWrapperStyle() {
-			if (!this.containerAspectRatio || !this.videoAspectRatio) {
+			if (!this.containerAspectRatio || !this.videoAspectRatio || !this.isBig || this.isGrid) {
 				return
 			}
 
@@ -240,7 +248,7 @@ export default {
 		 * A "failed" connection state will trigger a reconnection, but that may
 		 * not immediately change the "negotiating" or "connecting" attributes
 		 * (for example, while the new offer requested to the HPB was not
-		 * received yet). Similarly both "negotiating" and "connecting" need to
+		 * received yet). Similarly, both "negotiating" and "connecting" need to
 		 * be checked, as the negotiation will start before the connection
 		 * attempt is started.
 		 *
@@ -302,7 +310,13 @@ export default {
 		},
 
 		avatarSize() {
-			return this.isBig ? 128 : 128
+			if (this.isStripe || (!this.isBig && !this.isGrid)) {
+				return AVATAR.SIZE.LARGE
+			} else if (!this.containerAspectRatio) {
+				return AVATAR.SIZE.FULL
+			} else {
+				return Math.min(AVATAR.SIZE.FULL, this.$refs.videoContainer.clientHeight / 2, this.$refs.videoContainer.clientWidth / 2)
+			}
 		},
 
 		avatarClass() {
@@ -311,21 +325,10 @@ export default {
 			}
 		},
 
-		guestAvatarClass() {
-			return Object.assign(this.avatarClass, {
-				['avatar-' + this.avatarSize + 'px']: true,
-			})
-		},
-
 		connectionMessageClass() {
 			return {
 				'below-avatar': this.showBackgroundAndAvatar,
 			}
-		},
-
-		firstLetterOfGuestName() {
-			const customName = this.participantName && this.participantName !== t('spreed', 'Guest') ? this.participantName : '?'
-			return customName.charAt(0)
 		},
 
 		sessionHash() {
@@ -347,12 +350,24 @@ export default {
 
 		participant() {
 			/**
-			 * This only works for logged in users. Guests can not load the data
+			 * This only works for logged-in users. Guests can not load the data
 			 * via the participant list
 			 */
 			return this.$store.getters.findParticipant(this.$store.getters.getToken(), {
 				sessionId: this.peerId,
 			}) || {}
+		},
+
+		participantActorType() {
+			if (this.participant?.actorType) {
+				return this.participant.actorType
+			} else if (this.peerData?.actorType) {
+				return this.peerData.actorType
+			} else {
+				return this.participantUserId
+					? ATTENDEE.ACTOR_TYPE.USERS
+					: ATTENDEE.ACTOR_TYPE.GUESTS
+			}
 		},
 
 		participantUserId() {
@@ -393,7 +408,7 @@ export default {
 			// for registered users, so do not fall back to the guest name in
 			// the store either until the connection was made.
 			if (!this.model.attributes.userId && !participantName && participantName !== undefined) {
-				participantName = this.$store.getters.getGuestName(
+				participantName = this.guestNameStore.getGuestName(
 					this.$store.getters.getToken(),
 					this.sessionHash,
 				)
@@ -432,9 +447,9 @@ export default {
 		showSharedScreen() {
 			// Big screen
 			if (this.isBig) {
-				// Alwais show shared screen if there's one
+				// Always show shared screen if there's one
 				return this.hasSharedScreen
-			// Stripe
+				// Stripe
 			} else if (this.isStripe) {
 				if (this.isSharedScreenPromoted) {
 					return false
@@ -443,10 +458,10 @@ export default {
 					return !((this.isSelected) ? this.isSelected : this.isPromoted) && this.hasSharedScreen
 				}
 
-			// Grid
+				// Grid
 			} else {
-				// Alwais show shared screen if there's one
-				return this.hasSharedScreen
+				// Always show shared screen if there's one
+				return this.hasSharedScreen && !this.isPresenterOverlay
 			}
 		},
 
@@ -454,7 +469,7 @@ export default {
 			// Screenshare have higher priority so return false if screenshare
 			// is shown
 			if (this.hasSharedScreen) {
-				return !this.showSharedScreen && this.hasVideo && !this.isSelected
+				return (!this.showSharedScreen && this.hasVideo && !this.isSelected) || this.isPresenterOverlay
 			} else {
 				if (this.isStripe) {
 					if (this.hasSelectedVideo) {
@@ -517,7 +532,7 @@ export default {
 		// Set initial state
 		this._setStream(this.model.attributes.stream)
 
-		if (this.isBig) {
+		if (this.isBig || this.isGrid) {
 			this.resizeObserver = new ResizeObserver(this.updateContainerAspectRatio)
 			this.resizeObserver.observe(this.$refs.videoContainer)
 		}
@@ -582,11 +597,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../../../assets/avatar';
-@import '../../../assets/variables';
-@include avatar-mixin(64px);
-@include avatar-mixin(128px);
-
 .forced-white {
 	filter: drop-shadow(1px 1px 4px var(--color-box-shadow));
 }
@@ -605,15 +615,17 @@ export default {
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
-	border-radius: calc(var(--default-clickable-area)/2);
+	border-radius: calc(var(--default-clickable-area) / 2);
 }
 
 .video-container-big {
 	position: absolute;
+
 	&.one-to-one {
 		width: calc(100% - 16px);
 		height: calc(100% - 8px);
 	}
+
 	& .videoWrapper {
 		margin: auto;
 	}
@@ -636,14 +648,14 @@ export default {
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	border-radius: calc(var(--default-clickable-area)/2);
+	border-radius: calc(var(--default-clickable-area) / 2);
 }
 
 .videoWrapper,
 .video {
 	height: 100%;
 	width: 100%;
-	border-radius: calc(var(--default-clickable-area)/2);
+	border-radius: calc(var(--default-clickable-area) / 2);
 }
 
 .videoWrapper.icon-loading:after {
@@ -680,24 +692,38 @@ export default {
 	top: calc(50% + 80px);
 }
 
-.speaking-shadow {
+.video-container::after {
 	position: absolute;
 	height: 100%;
 	width: 100%;
 	top: 0;
 	left: 0;
+	border-radius: calc(var(--default-clickable-area) / 2);
+}
+.video-container.speaking::after {
+	content: '';
 	box-shadow: inset 0 0 0 2px white;
-	border-radius: calc(var(--default-clickable-area)/2);
 }
 
-.hover-shadow {
+.video-container.hover::after {
+	content: '';
+	box-shadow: inset 0 0 0 3px white;
+	cursor: pointer;
+}
+
+.presenter-icon__hide {
 	position: absolute;
 	height: 100%;
 	width: 100%;
 	top: 0;
 	left: 0;
-	box-shadow: inset 0 0 0 3px white;
-	cursor: pointer;
-	border-radius: calc(var(--default-clickable-area)/2);
+	color: white;
 }
+
+.video-container.presenter::after {
+	content: '' ;
+	background-color: rgba(0, 0, 0, 0.5);
+	cursor: pointer;
+}
+
 </style>

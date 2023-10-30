@@ -91,6 +91,7 @@
 					:menu-container="containerElement"
 					:placeholder="placeholderText"
 					:aria-label="placeholderText"
+					dir="auto"
 					@shortkey="focusInput"
 					@keydown.esc="handleInputEsc"
 					@tribute-active-true.native="isTributePickerActive = true"
@@ -108,7 +109,7 @@
 
 			<!-- Send buttons -->
 			<template v-else>
-				<NcActions v-if="!broadcast"
+				<NcActions v-if="!broadcast && !upload"
 					:container="container"
 					:force-menu="true">
 					<!-- Silent send -->
@@ -135,9 +136,6 @@
 				</NcButton>
 			</template>
 		</form>
-
-		<!-- File upload dialog -->
-		<NewMessageUploadEditor />
 
 		<!-- Poll creation dialog -->
 		<NewMessagePollEditor v-if="showPollEditor"
@@ -174,9 +172,7 @@ import NewMessageAudioRecorder from './NewMessageAudioRecorder.vue'
 import NewMessageNewFileDialog from './NewMessageNewFileDialog.vue'
 import NewMessagePollEditor from './NewMessagePollEditor.vue'
 import NewMessageTypingIndicator from './NewMessageTypingIndicator.vue'
-import NewMessageUploadEditor from './NewMessageUploadEditor.vue'
 
-import { useViewer } from '../../composables/useViewer.js'
 import { CONVERSATION, PARTICIPANT, PRIVACY } from '../../constants.js'
 import { EventBus } from '../../services/EventBus.js'
 import { shareFile } from '../../services/filesSharingServices.js'
@@ -211,7 +207,6 @@ export default {
 		NewMessageNewFileDialog,
 		NewMessagePollEditor,
 		NewMessageTypingIndicator,
-		NewMessageUploadEditor,
 		Quote,
 		// Icons
 		BellOff,
@@ -246,6 +241,14 @@ export default {
 		},
 
 		/**
+		 * Upload files caption.
+		 */
+		upload: {
+			type: Boolean,
+			default: false,
+		},
+
+		/**
 		 * Show an indicator if someone is currently typing a message.
 		 */
 		hasTypingIndicator: {
@@ -259,11 +262,9 @@ export default {
 	expose: ['focusInput'],
 
 	setup() {
-		const { openViewer } = useViewer()
 		const settingsStore = useSettingsStore()
 
 		return {
-			openViewer,
 			settingsStore,
 			supportTypingStatus,
 		}
@@ -366,11 +367,11 @@ export default {
 		},
 
 		showAttachmentsMenu() {
-			return this.canShareFiles && !this.broadcast
+			return this.canShareFiles && !this.broadcast && !this.upload
 		},
 
 		showAudioRecorder() {
-			return !this.hasText && this.canUploadFiles && !this.broadcast
+			return !this.hasText && this.canUploadFiles && !this.broadcast && !this.upload
 		},
 		showTypingStatus() {
 			return this.hasTypingIndicator && this.supportTypingStatus
@@ -453,8 +454,15 @@ export default {
 		},
 
 		handleUploadStart() {
-			// refocus on upload start as the user might want to type again while the upload is running
-			this.focusInput()
+			if (this.upload) {
+				return
+			}
+			this.$nextTick(() => {
+				// reset main input in chat view after upload file with caption
+				this.text = this.$store.getters.currentMessageInput(this.token)
+				// refocus on upload start as the user might want to type again while the upload is running
+				this.focusInput()
+			})
 		},
 
 		/**
@@ -473,20 +481,23 @@ export default {
 				}
 			}
 
+			if (this.upload) {
+				this.$emit('sent', this.text)
+				this.$store.dispatch('setCurrentMessageInput', { token: this.token, text: '' })
+				return
+			}
+
 			if (this.hasText) {
-				// FIXME: remove after issue is resolved: https://github.com/nextcloud/nextcloud-vue/issues/3264
+				// FIXME upstream: https://github.com/nextcloud-libraries/nextcloud-vue/issues/4492
 				const temp = document.createElement('textarea')
-				temp.innerHTML = this.text
-				this.text = temp.value
+				temp.innerHTML = this.text.replace(/&/gmi, '&amp;')
+				this.text = temp.value.replace(/&amp;/gmi, '&').replace(/&lt;/gmi, '<')
+					.replace(/&gt;/gmi, '>').replace(/&sect;/gmi, '§')
 
 				const temporaryMessage = await this.$store.dispatch('createTemporaryMessage', {
 					text: this.text.trim(),
 					token: this.token,
 				})
-				// FIXME: move "addTemporaryMessage" into "postNewMessage" as it's a pre-requisite anyway ?
-				if (!this.broadcast) {
-					await this.$store.dispatch('addTemporaryMessage', temporaryMessage)
-				}
 				this.text = ''
 				this.resetTypingIndicator()
 				this.userData = {}
@@ -712,6 +723,11 @@ export default {
 			const possibleMentions = response.data.ocs.data
 
 			possibleMentions.forEach(possibleMention => {
+				// TODO fix backend for userMention
+				if (!possibleMention.title && possibleMention.label) {
+					possibleMention.title = possibleMention.label
+				}
+
 				// Set icon for candidate mentions that are not for users.
 				if (possibleMention.source === 'calls') {
 					possibleMention.icon = 'icon-user-forced-white'
@@ -790,8 +806,6 @@ export default {
 </style>
 
 <style lang="scss" scoped>
-@import '../../assets/variables';
-
 .wrapper {
 	padding: 12px 0;
 	min-height: 69px;
@@ -841,9 +855,9 @@ export default {
 	&__icon:hover,
 	&__icon:focus,
 	&__icon:active {
-		opacity: $opacity_full;
+		opacity: 1;
 		// good looking on dark AND white bg
-		background-color: $icon-focus-bg;
+		background-color: rgba(127, 127, 127, .25);
 	}
 }
 
@@ -860,5 +874,10 @@ export default {
 	&:disabled {
 		opacity: .5 !important;
 	}
+}
+
+// Hardcode to prevent RTL affecting on user mentions
+:deep(.mention-bubble) {
+	direction: ltr;
 }
 </style>

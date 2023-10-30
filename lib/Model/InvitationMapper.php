@@ -27,9 +27,7 @@ namespace OCA\Talk\Model;
 
 use OCA\Talk\Room;
 use OCP\AppFramework\Db\DoesNotExistException;
-use OCP\AppFramework\Db\MultipleObjectsReturnedException;
 use OCP\AppFramework\Db\QBMapper;
-use OCP\DB\Exception as DBException;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IUser;
@@ -50,8 +48,6 @@ class InvitationMapper extends QBMapper {
 	}
 
 	/**
-	 * @throws DBException
-	 * @throws MultipleObjectsReturnedException
 	 * @throws DoesNotExistException
 	 */
 	public function getInvitationById(int $id): Invitation {
@@ -65,9 +61,22 @@ class InvitationMapper extends QBMapper {
 	}
 
 	/**
+	 * @throws DoesNotExistException
+	 */
+	public function getByRemoteIdAndToken(int $remoteId, string $accessToken): Invitation {
+		$qb = $this->db->getQueryBuilder();
+
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('remote_id', $qb->createNamedParameter($remoteId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('access_token', $qb->createNamedParameter($accessToken)));
+
+		return $this->findEntity($qb);
+	}
+
+	/**
 	 * @param Room $room
 	 * @return Invitation[]
-	 * @throws DBException
 	 */
 	public function getInvitationsForRoom(Room $room): array {
 		$qb = $this->db->getQueryBuilder();
@@ -82,7 +91,6 @@ class InvitationMapper extends QBMapper {
 	/**
 	 * @param IUser $user
 	 * @return Invitation[]
-	 * @throws DBException
 	 */
 	public function getInvitationsForUser(IUser $user): array {
 		$qb = $this->db->getQueryBuilder();
@@ -94,9 +102,6 @@ class InvitationMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
-	/**
-	 * @throws DBException
-	 */
 	public function countInvitationsForRoom(Room $room): int {
 		$qb = $this->db->getQueryBuilder();
 
@@ -108,7 +113,7 @@ class InvitationMapper extends QBMapper {
 		$row = $result->fetch();
 		$result->closeCursor();
 
-		return (int) ($row['num_invitations' ?? 0]);
+		return (int) ($row['num_invitations'] ?? 0);
 	}
 
 	public function createInvitationFromRow(array $row): Invitation {
